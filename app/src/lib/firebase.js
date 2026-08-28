@@ -2,8 +2,7 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithCredential,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -36,24 +35,21 @@ export const ALLOWED_EMAIL = import.meta.env.VITE_ALLOWED_EMAIL;
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
 export const db = getFirestore(app);
-const googleProvider = new GoogleAuthProvider();
 
 export function isAllowedEmail(user) {
   return !!user && !!user.email && user.email.toLowerCase() === (ALLOWED_EMAIL || "").toLowerCase();
 }
 
-// Popup-based sign-in is unreliable on iOS Safari (tracking prevention kills
-// the popup silently, often with no catchable error) and doesn't work at all
-// in a standalone home-screen PWA. Redirect works everywhere.
-export function signInWithGoogle() {
-  return signInWithRedirect(auth, googleProvider);
-}
-
-// Call once on app load to surface any error from a just-completed redirect
-// (e.g. an unauthorized domain) - onAuthStateChanged fires on success on its
-// own, but errors would otherwise be silently swallowed.
-export function checkRedirectResult() {
-  return getRedirectResult(auth);
+// Both signInWithPopup and signInWithRedirect turned out unreliable on iOS
+// Safari and Brave: they depend on cross-origin storage correlation (bouncing
+// through the Firebase authDomain and back) that these browsers' tracking
+// protections partition/block, so the flow "completes" on Google's side but
+// never re-establishes locally. Google Identity Services' native button
+// (already used for Calendar) hands us an ID token directly in-page with no
+// redirect at all, sidestepping that entirely.
+export function signInWithGoogleIdToken(idToken) {
+  const credential = GoogleAuthProvider.credential(idToken);
+  return signInWithCredential(auth, credential);
 }
 
 export function signOutUser() {
