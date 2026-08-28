@@ -21,7 +21,22 @@ function corsHeaders(env: Env) {
     "Access-Control-Allow-Origin": env.ALLOWED_ORIGIN || "*",
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    Vary: "Origin",
   };
+}
+
+// ALLOWED_ORIGIN may be a comma-separated allowlist (e.g. the deployed site
+// plus http://localhost:5173 for local dev). Reflect back whichever one the
+// request actually came from, since a single Access-Control-Allow-Origin
+// value can't match multiple origins at once.
+function resolveAllowedOrigin(request: Request, rawAllowed: string): string {
+  const origin = request.headers.get("Origin") || "";
+  const allowed = rawAllowed
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (allowed.includes(origin)) return origin;
+  return allowed[0] || "*";
 }
 
 function json(data: unknown, env: Env, status = 200) {
@@ -184,7 +199,12 @@ async function handleCalendarRefresh(request: Request, env: Env): Promise<Respon
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, rawEnv: Env): Promise<Response> {
+    // Resolve the multi-origin allowlist down to the single origin this
+    // request actually came from, then thread it through as env.ALLOWED_ORIGIN
+    // so every existing handler/json()/corsHeaders() call works unchanged.
+    const env: Env = { ...rawEnv, ALLOWED_ORIGIN: resolveAllowedOrigin(request, rawEnv.ALLOWED_ORIGIN) };
+
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: corsHeaders(env) });
     }
