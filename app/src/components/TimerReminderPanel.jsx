@@ -30,8 +30,11 @@ function beep() {
 
 function notify(title, body) {
   beep();
-  if (window.Notification && Notification.permission === "granted") {
-    new Notification(title, { body });
+  // Bare `Notification` throws a ReferenceError on browsers that don't
+  // implement it at all (e.g. iOS Safari) - window.Notification is a safe
+  // property access instead, so use it everywhere, never the bare global.
+  if (window.Notification && window.Notification.permission === "granted") {
+    new window.Notification(title, { body });
   }
 }
 
@@ -75,8 +78,8 @@ export default function TimerReminderPanel() {
   };
 
   useEffect(() => {
-    if (Notification && Notification.permission === "default") {
-      Notification.requestPermission().catch(() => {});
+    if (window.Notification && window.Notification.permission === "default") {
+      window.Notification.requestPermission().catch(() => {});
     }
     refreshReminders();
     const id = setInterval(async () => {
