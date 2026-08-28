@@ -10,9 +10,11 @@ import HealthPanel from "./components/HealthPanel.jsx";
 import DomainSettings from "./components/DomainSettings.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import UploadSchedule from "./components/UploadSchedule.jsx";
+import MobileLayout from "./components/MobileLayout.jsx";
 import { signOutUser } from "./lib/firebase.js";
+import { useIsMobile } from "./lib/useIsMobile.js";
 
-function Dashboard() {
+function DesktopDashboard() {
   const ampRef = useRef(0);
 
   return (
@@ -38,6 +40,11 @@ function Dashboard() {
       </div>
     </div>
   );
+}
+
+function Dashboard() {
+  const isMobile = useIsMobile();
+  return isMobile ? <MobileLayout /> : <DesktopDashboard />;
 }
 
 function Gate() {
