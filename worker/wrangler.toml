@@ -1,0 +1,14 @@
+name = "edith-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+[vars]
+# The only email allowed to use this backend.
+ALLOWED_EMAIL = "ashmitamalik82@gmail.com"
+# Your Firebase project id (Firebase Console > Project settings).
+FIREBASE_PROJECT_ID = "REPLACE_WITH_FIREBASE_PROJECT_ID"
+# The origin your GitHub Pages site is served from, e.g. https://yourname.github.io
+ALLOWED_ORIGIN = "https://REPLACE_WITH_YOUR_GITHUB_USERNAME.github.io"
+
+# Set the real secret with:
+#   wrangler secret put ANTHROPIC_API_KEY
