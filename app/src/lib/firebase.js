@@ -2,7 +2,8 @@ import { initializeApp } from "firebase/app";
 import {
   getAuth,
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   signOut,
   onAuthStateChanged,
 } from "firebase/auth";
@@ -41,8 +42,18 @@ export function isAllowedEmail(user) {
   return !!user && !!user.email && user.email.toLowerCase() === (ALLOWED_EMAIL || "").toLowerCase();
 }
 
+// Popup-based sign-in is unreliable on iOS Safari (tracking prevention kills
+// the popup silently, often with no catchable error) and doesn't work at all
+// in a standalone home-screen PWA. Redirect works everywhere.
 export function signInWithGoogle() {
-  return signInWithPopup(auth, googleProvider);
+  return signInWithRedirect(auth, googleProvider);
+}
+
+// Call once on app load to surface any error from a just-completed redirect
+// (e.g. an unauthorized domain) - onAuthStateChanged fires on success on its
+// own, but errors would otherwise be silently swallowed.
+export function checkRedirectResult() {
+  return getRedirectResult(auth);
 }
 
 export function signOutUser() {

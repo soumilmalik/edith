@@ -3,7 +3,7 @@ import { signInWithGoogle, signOutUser } from "../lib/firebase.js";
 import { useAppState } from "../state/appState.js";
 
 export default function Login() {
-  const { user, authorized } = useAppState();
+  const { user, authorized, authError } = useAppState();
 
   const notAuthorized = user && !authorized;
 
@@ -20,6 +20,11 @@ export default function Login() {
         <>
           <p className="small">Personal life management system</p>
           <button onClick={signInWithGoogle}>Sign in with Google</button>
+          {authError && (
+            <p className="small" style={{ color: "var(--danger)", maxWidth: 320 }}>
+              {authError}
+            </p>
+          )}
         </>
       )}
     </div>

@@ -1,5 +1,13 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
-import { watchAuth, isAllowedEmail, getProfile, getDomains, saveProfile, saveDomains } from "../lib/firebase.js";
+import {
+  watchAuth,
+  isAllowedEmail,
+  getProfile,
+  getDomains,
+  saveProfile,
+  saveDomains,
+  checkRedirectResult,
+} from "../lib/firebase.js";
 
 const AppStateContext = createContext(null);
 
@@ -9,6 +17,11 @@ export function AppStateProvider({ children }) {
   const [profile, setProfile] = useState({ bio: "", decadeGoals: "", yearGoals: "", monthGoals: "", weekGoals: "" });
   const [domains, setDomains] = useState(["Health", "Academics", "Business/Money", "Extracurriculars"]);
   const [loadingData, setLoadingData] = useState(false);
+  const [authError, setAuthError] = useState("");
+
+  useEffect(() => {
+    checkRedirectResult().catch((err) => setAuthError(err.message || String(err)));
+  }, []);
 
   useEffect(() => {
     return watchAuth(async (u) => {
@@ -43,7 +56,17 @@ export function AppStateProvider({ children }) {
     [user]
   );
 
-  const value = { user, authorized, profile, domains, loadingData, updateProfile, updateDomains, setProfileLocal: setProfile };
+  const value = {
+    user,
+    authorized,
+    profile,
+    domains,
+    loadingData,
+    authError,
+    updateProfile,
+    updateDomains,
+    setProfileLocal: setProfile,
+  };
   return React.createElement(AppStateContext.Provider, { value }, children);
 }
 
