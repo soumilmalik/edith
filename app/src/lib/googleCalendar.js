@@ -1,52 +1,136 @@
-// Wraps Google Identity Services (loaded via <script> in index.html) for an
-// OAuth access token scoped to Calendar, and the Calendar REST API itself.
-// This never goes through the Worker backend - the token lives only in the browser.
+// Wraps Google Identity Services (loaded via <script> in index.html) for
+// Calendar access, and the Calendar REST API itself.
+//
+// Auth design: a one-time "authorization code" popup (must be triggered by a
+// real click) is exchanged via the Worker for an access token + a refresh
+// token. The refresh token is stored in this user's own Firestore doc (never
+// touched by the Worker itself) and used to silently mint new access tokens
+// on every future visit - no popup, no re-consent, ever, until revoked.
+
+import { auth } from "./firebase.js";
+import { getGoogleRefreshToken, saveGoogleRefreshToken } from "./firebase.js";
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const SCOPE = "https://www.googleapis.com/auth/calendar";
-const CALENDAR_BASE = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+const API_BASE = "https://www.googleapis.com/calendar/v3";
+const eventsUrl = (calendarId) => `${API_BASE}/calendars/${encodeURIComponent(calendarId)}/events`;
 
-let tokenClient = null;
+let codeClient = null;
 let accessToken = null;
 let tokenExpiresAt = 0;
+let everConnected = false;
 
-function ensureTokenClient() {
-  if (tokenClient) return tokenClient;
+function ensureCodeClient() {
+  if (codeClient) return codeClient;
   if (!window.google?.accounts?.oauth2) {
     throw new Error("Google Identity Services script not loaded yet");
   }
-  tokenClient = window.google.accounts.oauth2.initTokenClient({
+  codeClient = window.google.accounts.oauth2.initCodeClient({
     client_id: CLIENT_ID,
     scope: SCOPE,
-    callback: () => {}, // overridden per-request in requestAccessToken
+    ux_mode: "popup",
+    access_type: "offline",
+    prompt: "consent", // forces Google to issue a refresh_token every time
+    callback: () => {}, // overridden per-request
   });
-  return tokenClient;
+  return codeClient;
 }
 
-export function requestAccessToken({ silent = false } = {}) {
-  return new Promise((resolve, reject) => {
-    const client = ensureTokenClient();
-    client.callback = (resp) => {
-      if (resp.error) {
-        reject(new Error(resp.error));
-        return;
-      }
-      accessToken = resp.access_token;
-      tokenExpiresAt = Date.now() + (resp.expires_in - 60) * 1000;
-      resolve(accessToken);
-    };
-    client.requestAccessToken({ prompt: silent ? "" : "consent" });
+async function currentUser() {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not signed in");
+  const idToken = await user.getIdToken();
+  return { uid: user.uid, idToken };
+}
+
+async function workerPost(path, body, idToken) {
+  const res = await fetch(`${WORKER_URL}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
+    body: JSON.stringify(body),
   });
+  if (!res.ok) throw new Error(`${path} failed: ${await res.text()}`);
+  return res.json();
+}
+
+function applyTokens(tokens) {
+  accessToken = tokens.access_token;
+  tokenExpiresAt = Date.now() + (tokens.expires_in - 60) * 1000;
+  everConnected = true;
+}
+
+// One-time explicit connect. MUST be called directly from a click handler -
+// this is the only place in the whole app that opens a real Google popup.
+export function connectCalendar() {
+  const attempt = (async () => {
+    const { uid, idToken } = await currentUser();
+    return new Promise((resolve, reject) => {
+      const client = ensureCodeClient();
+      client.callback = async (resp) => {
+        if (resp.error) {
+          reject(new Error(resp.error));
+          return;
+        }
+        try {
+          const tokens = await workerPost("/api/calendar/exchange", { code: resp.code }, idToken);
+          applyTokens(tokens);
+          if (tokens.refresh_token) await saveGoogleRefreshToken(uid, tokens.refresh_token);
+          resolve(accessToken);
+        } catch (err) {
+          reject(err);
+        }
+      };
+      client.requestCode();
+    });
+  })();
+
+  const timeout = new Promise((_, reject) =>
+    setTimeout(
+      () => reject(new Error("Google sign-in popup didn't open (likely blocked by the browser) or timed out.")),
+      15000
+    )
+  );
+
+  return Promise.race([attempt, timeout]);
+}
+
+// Silently restores a connection using a previously stored refresh token -
+// no popup at all, safe to call automatically on page load.
+export async function tryRestoreConnection() {
+  try {
+    const { uid, idToken } = await currentUser();
+    const refreshToken = await getGoogleRefreshToken(uid);
+    if (!refreshToken) return false;
+    const tokens = await workerPost("/api/calendar/refresh", { refreshToken }, idToken);
+    applyTokens({ ...tokens, refresh_token: undefined });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// True once a token has been granted (this session or restored on load).
+// Use this to gate any calendar call that isn't itself a direct click handler.
+export function isConnected() {
+  return everConnected;
 }
 
 async function getToken() {
   if (accessToken && Date.now() < tokenExpiresAt) return accessToken;
-  return requestAccessToken({ silent: !!accessToken });
+  // Mid-session expiry (~1hr): refresh silently via the stored refresh token,
+  // no popup needed since we already have offline access.
+  const { uid, idToken } = await currentUser();
+  const refreshToken = await getGoogleRefreshToken(uid);
+  if (!refreshToken) throw new Error("Google Calendar isn't connected");
+  const tokens = await workerPost("/api/calendar/refresh", { refreshToken }, idToken);
+  applyTokens({ ...tokens, refresh_token: undefined });
+  return accessToken;
 }
 
-async function calendarFetch(path, options = {}) {
+async function apiFetch(url, options = {}) {
   const token = await getToken();
-  const res = await fetch(`${CALENDAR_BASE}${path}`, {
+  const res = await fetch(url, {
     ...options,
     headers: {
       ...(options.headers || {}),
@@ -62,6 +146,21 @@ async function calendarFetch(path, options = {}) {
   return res.json();
 }
 
+// The user's full list of calendars (their primary one plus any others they
+// created/subscribed to, e.g. per-subject timetable calendars). Cached for
+// the session since it rarely changes.
+let calendarListCache = null;
+export async function listCalendars({ fresh = false } = {}) {
+  if (calendarListCache && !fresh) return calendarListCache;
+  const data = await apiFetch(`${API_BASE}/users/me/calendarList`);
+  calendarListCache = (data.items || []).filter((c) => c.selected !== false);
+  return calendarListCache;
+}
+
+// Lists events across every visible calendar the user has (not just
+// "primary"), since class/subject schedules are often kept on separate
+// calendars. Each returned event carries calendarId/calendarName so it can
+// be edited/deleted on the calendar it actually lives on.
 export async function listEvents(timeMin, timeMax) {
   const params = new URLSearchParams({
     timeMin: new Date(timeMin).toISOString(),
@@ -70,12 +169,22 @@ export async function listEvents(timeMin, timeMax) {
     orderBy: "startTime",
     maxResults: "250",
   });
-  const data = await calendarFetch(`?${params.toString()}`);
-  return data.items || [];
+  const calendars = await listCalendars();
+  const perCalendar = await Promise.all(
+    calendars.map(async (c) => {
+      try {
+        const data = await apiFetch(`${eventsUrl(c.id)}?${params.toString()}`);
+        return (data.items || []).map((e) => ({ ...e, calendarId: c.id, calendarName: c.summary }));
+      } catch {
+        return []; // skip a calendar we don't have events access to rather than failing the whole load
+      }
+    })
+  );
+  return perCalendar.flat();
 }
 
-export async function createEvent({ title, description, start, end, domain, priority }) {
-  return calendarFetch("", {
+export async function createEvent({ title, description, start, end, domain, priority, calendarId = "primary" }) {
+  return apiFetch(eventsUrl(calendarId), {
     method: "POST",
     body: JSON.stringify({
       summary: title,
@@ -88,15 +197,15 @@ export async function createEvent({ title, description, start, end, domain, prio
   });
 }
 
-export async function updateEvent(eventId, patch) {
+export async function updateEvent(eventId, patch, calendarId = "primary") {
   const body = {};
   if (patch.title) body.summary = patch.title;
   if (patch.description) body.description = patch.description;
   if (patch.start) body.start = { dateTime: new Date(patch.start).toISOString() };
   if (patch.end) body.end = { dateTime: new Date(patch.end).toISOString() };
-  return calendarFetch(`/${eventId}`, { method: "PATCH", body: JSON.stringify(body) });
+  return apiFetch(`${eventsUrl(calendarId)}/${eventId}`, { method: "PATCH", body: JSON.stringify(body) });
 }
 
-export async function deleteEvent(eventId) {
-  return calendarFetch(`/${eventId}`, { method: "DELETE" });
+export async function deleteEvent(eventId, calendarId = "primary") {
+  return apiFetch(`${eventsUrl(calendarId)}/${eventId}`, { method: "DELETE" });
 }

@@ -4,11 +4,14 @@ compatibility_date = "2024-11-01"
 
 [vars]
 # The only email allowed to use this backend.
-ALLOWED_EMAIL = "ashmitamalik82@gmail.com"
+ALLOWED_EMAIL = "a999malik@gmail.com"
 # Your Firebase project id (Firebase Console > Project settings).
-FIREBASE_PROJECT_ID = "REPLACE_WITH_FIREBASE_PROJECT_ID"
+FIREBASE_PROJECT_ID = "edith-506915"
 # The origin your GitHub Pages site is served from, e.g. https://yourname.github.io
-ALLOWED_ORIGIN = "https://REPLACE_WITH_YOUR_GITHUB_USERNAME.github.io"
+ALLOWED_ORIGIN = "https://soumilmalik.github.io"
+# Not secret - same value as the frontend's VITE_GOOGLE_CLIENT_ID.
+GOOGLE_CLIENT_ID = "231274176288-egq6fs2ccpnhvbkqi2p1l8m17lhhdgfd.apps.googleusercontent.com"
 
-# Set the real secret with:
+# Set the real secrets with:
 #   wrangler secret put ANTHROPIC_API_KEY
+#   wrangler secret put GOOGLE_CLIENT_SECRET

@@ -6,7 +6,8 @@ import * as fb from "./firebase.js";
 export const TOOL_SCHEMAS = [
   {
     name: "list_events",
-    description: "List calendar events in a time window, to check the user's schedule or detect conflicts.",
+    description:
+      "List calendar events in a time window, to check the user's schedule or detect conflicts. Searches across all of the user's calendars (not just primary) - each result includes calendarId, which you must pass back into update_event/delete_event for that event.",
     input_schema: {
       type: "object",
       properties: {
@@ -35,11 +36,13 @@ export const TOOL_SCHEMAS = [
   },
   {
     name: "update_event",
-    description: "Edit an existing calendar event by its id.",
+    description:
+      "Edit an existing calendar event by its id. Pass the calendarId exactly as returned by list_events for that event (defaults to 'primary' if omitted, but many events live on other calendars, e.g. per-subject timetable calendars).",
     input_schema: {
       type: "object",
       properties: {
         eventId: { type: "string" },
+        calendarId: { type: "string", description: "From list_events' calendarId field for this event" },
         title: { type: "string" },
         description: { type: "string" },
         start: { type: "string" },
@@ -51,10 +54,13 @@ export const TOOL_SCHEMAS = [
   {
     name: "delete_event",
     description:
-      "Delete a calendar event by id. Only call this after the user has explicitly confirmed in the conversation.",
+      "Delete a calendar event by id. Pass the calendarId exactly as returned by list_events for that event. Only call this after the user has explicitly confirmed in the conversation.",
     input_schema: {
       type: "object",
-      properties: { eventId: { type: "string" } },
+      properties: {
+        eventId: { type: "string" },
+        calendarId: { type: "string", description: "From list_events' calendarId field for this event" },
+      },
       required: ["eventId"],
     },
   },
@@ -139,13 +145,24 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
+const CALENDAR_TOOLS = new Set(["list_events", "create_event", "update_event", "delete_event"]);
+
 // ctx = { uid }
 export async function executeTool(name, input, ctx) {
+  if (CALENDAR_TOOLS.has(name) && !cal.isConnected()) {
+    return {
+      error: "calendar_not_connected",
+      message:
+        "Google Calendar isn't connected in this browser session yet. Tell the user to click 'Connect Google Calendar' in the Calendar panel, then ask again.",
+    };
+  }
   switch (name) {
     case "list_events": {
       const events = await cal.listEvents(input.timeMin, input.timeMax);
       return events.map((e) => ({
         id: e.id,
+        calendarId: e.calendarId,
+        calendarName: e.calendarName,
         title: e.summary,
         start: e.start?.dateTime || e.start?.date,
         end: e.end?.dateTime || e.end?.date,
@@ -160,6 +177,7 @@ export async function executeTool(name, input, ctx) {
           conflict: true,
           conflictingEvents: conflicts.map((e) => ({
             id: e.id,
+            calendarId: e.calendarId,
             title: e.summary,
             start: e.start?.dateTime || e.start?.date,
             end: e.end?.dateTime || e.end?.date,
@@ -171,11 +189,11 @@ export async function executeTool(name, input, ctx) {
       return { created: true, id: created.id, htmlLink: created.htmlLink };
     }
     case "update_event": {
-      const updated = await cal.updateEvent(input.eventId, input);
+      const updated = await cal.updateEvent(input.eventId, input, input.calendarId || "primary");
       return { updated: true, id: updated.id };
     }
     case "delete_event": {
-      await cal.deleteEvent(input.eventId);
+      await cal.deleteEvent(input.eventId, input.calendarId || "primary");
       return { deleted: true, id: input.eventId };
     }
     case "log_health": {

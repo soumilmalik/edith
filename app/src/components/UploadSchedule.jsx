@@ -58,6 +58,12 @@ export default function UploadSchedule() {
     setCreating(true);
     setError("");
     try {
+      if (!cal.isConnected()) {
+        // First-ever calendar call: do it directly in this click handler so
+        // the browser allows the consent popup (it blocks popups opened from
+        // background/async code that isn't a direct result of a click).
+        await cal.connectCalendar();
+      }
       for (const ev of extracted) {
         const conflicts = await cal.listEvents(ev.start, ev.end);
         if (conflicts.length > 0) {

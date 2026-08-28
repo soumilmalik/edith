@@ -5,6 +5,8 @@ export interface Env {
   ALLOWED_EMAIL: string;
   FIREBASE_PROJECT_ID: string;
   ALLOWED_ORIGIN: string;
+  GOOGLE_CLIENT_ID: string;
+  GOOGLE_CLIENT_SECRET: string;
 }
 
 const ANTHROPIC_MODEL = "claude-sonnet-5";
@@ -126,6 +128,61 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
   }
 }
 
+// Exchanges a one-time Google authorization code (from the frontend's
+// initCodeClient popup) for an access token + refresh token. The refresh
+// token is handed back to the frontend to store in the user's own Firestore
+// doc - this Worker stores nothing itself.
+async function handleCalendarExchange(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { code?: string };
+  if (!body?.code) return json({ error: "code is required" }, env, 400);
+
+  const params = new URLSearchParams({
+    code: body.code,
+    client_id: env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
+    redirect_uri: "postmessage",
+    grant_type: "authorization_code",
+  });
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) return json(data, env, res.status);
+
+  return json(
+    { access_token: data.access_token, refresh_token: data.refresh_token, expires_in: data.expires_in },
+    env
+  );
+}
+
+// Mints a fresh access token from a previously stored refresh token. No
+// Google popup involved at all - this is what lets the app "remember" the
+// user across page reloads.
+async function handleCalendarRefresh(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { refreshToken?: string };
+  if (!body?.refreshToken) return json({ error: "refreshToken is required" }, env, 400);
+
+  const params = new URLSearchParams({
+    refresh_token: body.refreshToken,
+    client_id: env.GOOGLE_CLIENT_ID,
+    client_secret: env.GOOGLE_CLIENT_SECRET,
+    grant_type: "refresh_token",
+  });
+
+  const res = await fetch("https://oauth2.googleapis.com/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) return json(data, env, res.status);
+
+  return json({ access_token: data.access_token, expires_in: data.expires_in }, env);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     if (request.method === "OPTIONS") {
@@ -141,6 +198,12 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/api/extract") {
       return handleExtract(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/api/calendar/exchange") {
+      return handleCalendarExchange(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/api/calendar/refresh") {
+      return handleCalendarRefresh(request, env);
     }
     return json({ error: "Not found" }, env, 404);
   },

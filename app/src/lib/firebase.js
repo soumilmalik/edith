@@ -107,6 +107,17 @@ export async function updateTask(uid, taskId, patch) {
   await updateDoc(doc(db, "users", uid, "tasks", taskId), patch);
 }
 
+// Google Calendar refresh token, so the app can silently reconnect on future
+// visits without a popup. Lives only in this user's own protected doc.
+export async function getGoogleRefreshToken(uid) {
+  const snap = await getDoc(doc(db, "users", uid, "meta", "googleAuth"));
+  return snap.exists() ? snap.data().refreshToken || null : null;
+}
+
+export async function saveGoogleRefreshToken(uid, refreshToken) {
+  await setDoc(doc(db, "users", uid, "meta", "googleAuth"), { refreshToken }, { merge: true });
+}
+
 export async function deleteTask(uid, taskId) {
   await deleteDoc(doc(db, "users", uid, "tasks", taskId));
 }

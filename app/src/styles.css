@@ -1,18 +1,46 @@
 :root {
   --bg: #000000;
   --panel-bg: rgba(0, 20, 30, 0.55);
-  --panel-border: rgba(0, 212, 255, 0.35);
-  --edith-blue: #00d4ff;
+  --panel-border: rgba(0, 225, 255, 0.65);
+  --edith-blue: #00e1ff;
   --edith-blue-dim: #0a5f75;
   --text: #d8f6ff;
   --text-dim: #6fa9b8;
   --danger: #ff4d6d;
   --font-display: "Orbitron", sans-serif;
-  --font-body: "Rajdhani", sans-serif;
+  --font-body: "Chakra Petch", sans-serif;
 }
 
 * {
   box-sizing: border-box;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--edith-blue) rgba(0, 20, 30, 0.4);
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: rgba(0, 20, 30, 0.4);
+}
+
+*::-webkit-scrollbar-thumb {
+  background: linear-gradient(var(--edith-blue), var(--edith-blue-dim));
+  border-radius: 6px;
+  box-shadow: 0 0 6px rgba(0, 225, 255, 0.7);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background: var(--edith-blue);
+}
+
+*::-webkit-scrollbar-corner {
+  background: transparent;
 }
 
 html,
@@ -55,7 +83,8 @@ body {
   grid-template-columns: 320px 1fr 340px;
   grid-template-rows: auto 1fr auto;
   gap: 12px;
-  padding: 16px;
+  padding: calc(16px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right))
+    calc(16px + env(safe-area-inset-bottom)) calc(16px + env(safe-area-inset-left));
   pointer-events: none;
 }
 
@@ -65,10 +94,10 @@ body {
 
 .panel {
   background: var(--panel-bg);
-  border: 1px solid var(--panel-border);
+  border: 1.5px solid var(--panel-border);
   border-radius: 10px;
   backdrop-filter: blur(6px);
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.08) inset, 0 0 12px rgba(0, 212, 255, 0.06);
+  box-shadow: 0 0 16px rgba(0, 225, 255, 0.35), 0 0 30px rgba(0, 225, 255, 0.12), 0 0 20px rgba(0, 225, 255, 0.15) inset;
   padding: 14px;
 }
 
@@ -166,23 +195,41 @@ textarea,
 select,
 button {
   font-family: var(--font-body);
-  background: rgba(0, 0, 0, 0.4);
+  background: rgba(0, 0, 0, 0.5);
   color: var(--text);
-  border: 1px solid var(--panel-border);
+  border: 1.5px solid var(--panel-border);
   border-radius: 6px;
   padding: 8px 10px;
   font-size: 0.95rem;
+  box-shadow: 0 0 6px rgba(0, 225, 255, 0.25);
+}
+
+/* iOS Safari auto-zooms the page when a focused input's font is under 16px */
+input,
+textarea,
+select {
+  font-size: 16px;
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  outline: none;
+  border-color: var(--edith-blue);
+  box-shadow: 0 0 12px rgba(0, 225, 255, 0.6);
 }
 
 button {
   cursor: pointer;
   color: var(--edith-blue);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
   transition: box-shadow 0.15s, background 0.15s;
 }
 
 button:hover {
-  background: rgba(0, 212, 255, 0.12);
-  box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+  background: rgba(0, 225, 255, 0.15);
+  box-shadow: 0 0 16px rgba(0, 225, 255, 0.85);
 }
 
 button:disabled {
@@ -190,18 +237,46 @@ button:disabled {
   cursor: not-allowed;
 }
 
+/* Themed file input - replaces the browser's default white "Choose File" control */
+input[type="file"] {
+  color: var(--text-dim);
+  padding: 6px 8px;
+}
+
+input[type="file"]::file-selector-button {
+  font-family: var(--font-body);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--edith-blue);
+  background: rgba(0, 0, 0, 0.5);
+  border: 1.5px solid var(--panel-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  margin-right: 10px;
+  cursor: pointer;
+  box-shadow: 0 0 6px rgba(0, 225, 255, 0.25);
+  transition: box-shadow 0.15s, background 0.15s;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: rgba(0, 225, 255, 0.15);
+  box-shadow: 0 0 16px rgba(0, 225, 255, 0.85);
+}
+
 .chat-input-row input {
   flex: 1;
 }
 
 .mic-btn {
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 1.2rem;
+  padding: 0;
 }
 
 .mic-btn.listening {
@@ -319,6 +394,7 @@ button:disabled {
     grid-template-columns: 1fr;
     grid-template-rows: auto auto auto auto;
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
   }
   .left-col,
   .right-col,
@@ -327,5 +403,41 @@ button:disabled {
     grid-column: 1;
     grid-row: auto;
     max-height: none;
+  }
+
+  /* Bigger touch targets and no accidental double-tap zoom on phones */
+  button {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+
+  input,
+  textarea,
+  select {
+    min-height: 44px;
+  }
+
+  .clock-time {
+    font-size: 2.2rem;
+  }
+
+  .orb-canvas {
+    opacity: 0.6;
+  }
+}
+
+@media (max-width: 480px) {
+  .hud-layer {
+    padding-left: calc(10px + env(safe-area-inset-left));
+    padding-right: calc(10px + env(safe-area-inset-right));
+    gap: 10px;
+  }
+
+  .clock-time {
+    font-size: 1.8rem;
+  }
+
+  .clock-date {
+    font-size: 0.75rem;
   }
 }
