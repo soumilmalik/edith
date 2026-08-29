@@ -8,14 +8,15 @@ import TimerReminderPanel from "./TimerReminderPanel.jsx";
 import HealthPanel from "./HealthPanel.jsx";
 import DomainSettings from "./DomainSettings.jsx";
 import Onboarding from "./Onboarding.jsx";
+import { ChatIcon, CalendarIcon, HealthIcon, TimerIcon, ProfileIcon } from "./Icons.jsx";
 import { signOutUser } from "../lib/firebase.js";
 
 const TABS = [
-  { key: "chat", label: "Edith", icon: "●" },
-  { key: "calendar", label: "Calendar", icon: "▦" },
-  { key: "health", label: "Health", icon: "✦" },
-  { key: "timers", label: "Timers", icon: "⏱" },
-  { key: "profile", label: "Profile", icon: "⚙" },
+  { key: "chat", label: "Edith", Icon: ChatIcon },
+  { key: "calendar", label: "Calendar", Icon: CalendarIcon },
+  { key: "health", label: "Health", Icon: HealthIcon },
+  { key: "timers", label: "Timers", Icon: TimerIcon },
+  { key: "profile", label: "Profile", Icon: ProfileIcon },
 ];
 
 export default function MobileLayout() {
@@ -54,7 +55,7 @@ export default function MobileLayout() {
               className={`tab-btn ${tab === t.key ? "active" : ""}`}
               onClick={() => setTab(t.key)}
             >
-              <span className="tab-icon">{t.icon}</span>
+              <t.Icon className="tab-icon" />
               <span className="tab-label">{t.label}</span>
             </button>
           ))}

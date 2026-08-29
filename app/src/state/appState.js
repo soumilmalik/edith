@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import { watchAuth, isAllowedEmail, getProfile, getDomains, saveProfile, saveDomains } from "../lib/firebase.js";
+import { notify } from "../lib/notify.js";
 
 const AppStateContext = createContext(null);
 
@@ -9,6 +10,52 @@ export function AppStateProvider({ children }) {
   const [profile, setProfile] = useState({ bio: "", decadeGoals: "", yearGoals: "", monthGoals: "", weekGoals: "" });
   const [domains, setDomains] = useState(["Health", "Academics", "Business/Money", "Extracurriculars"]);
   const [loadingData, setLoadingData] = useState(false);
+
+  // Bumped whenever a calendar event is created/edited/deleted from chat or
+  // the upload-schedule flow, so CalendarView (a sibling component) knows to
+  // reload without the user manually hitting Refresh.
+  const [calendarVersion, setCalendarVersion] = useState(0);
+  const bumpCalendarRefresh = useCallback(() => setCalendarVersion((v) => v + 1), []);
+
+  // Timer lives here (not inside TimerReminderPanel) so: (a) Edith can start
+  // one from chat/voice and it's the same timer the panel displays, and (b)
+  // it keeps counting even if the panel unmounts (e.g. switching mobile
+  // tabs), since it tracks an absolute end time rather than a local interval.
+  const [timerEndAt, setTimerEndAt] = useState(null);
+  const [timerRemainingMs, setTimerRemainingMs] = useState(null);
+  const [timerLabel, setTimerLabel] = useState("");
+
+  useEffect(() => {
+    if (!timerEndAt) {
+      setTimerRemainingMs(null);
+      return;
+    }
+    const tick = () => {
+      const rem = timerEndAt - Date.now();
+      if (rem <= 0) {
+        setTimerRemainingMs(0);
+        setTimerEndAt(null);
+        notify("Time's up", timerLabel ? `Timer: ${timerLabel}` : "Your timer finished.");
+      } else {
+        setTimerRemainingMs(rem);
+      }
+    };
+    tick();
+    const id = setInterval(tick, 250);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [timerEndAt]);
+
+  const startTimer = useCallback((minutes, label = "") => {
+    setTimerLabel(label);
+    setTimerEndAt(Date.now() + Math.max(1, minutes) * 60 * 1000);
+  }, []);
+
+  const cancelTimer = useCallback(() => {
+    setTimerEndAt(null);
+    setTimerRemainingMs(null);
+    setTimerLabel("");
+  }, []);
 
   useEffect(() => {
     return watchAuth(async (u) => {
@@ -52,6 +99,12 @@ export function AppStateProvider({ children }) {
     updateProfile,
     updateDomains,
     setProfileLocal: setProfile,
+    calendarVersion,
+    bumpCalendarRefresh,
+    timerRemainingMs,
+    timerLabel,
+    startTimer,
+    cancelTimer,
   };
   return React.createElement(AppStateContext.Provider, { value }, children);
 }

@@ -374,7 +374,20 @@ input[type="file"]::file-selector-button:hover {
   border-bottom: none;
 }
 
+.list-item > *:first-child {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: break-word;
+}
+
+.list-item > .row {
+  flex: 0 0 auto;
+}
+
 .badge {
+  display: inline-block;
+  max-width: 100%;
+  overflow-wrap: break-word;
   font-size: 0.7rem;
   padding: 2px 6px;
   border-radius: 4px;
@@ -553,7 +566,10 @@ input[type="file"]::file-selector-button:hover {
 
 .tab-btn.active {
   color: var(--edith-blue);
-  text-shadow: 0 0 8px rgba(0, 225, 255, 0.8);
+}
+
+.tab-btn.active .tab-icon {
+  filter: drop-shadow(0 0 5px rgba(0, 225, 255, 0.85));
 }
 
 .tab-btn:hover {
@@ -562,8 +578,9 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .tab-icon {
-  font-size: 1.2rem;
-  line-height: 1;
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
 }
 
 .tab-label {

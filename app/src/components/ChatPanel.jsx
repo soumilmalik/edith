@@ -10,7 +10,7 @@ const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
 
 export default function ChatPanel({ ampRef }) {
-  const { user, profile, domains, setProfileLocal } = useAppState();
+  const { user, profile, domains, setProfileLocal, bumpCalendarRefresh, startTimer } = useAppState();
   const isNewProfile = !profile.bio && !profile.decadeGoals && !profile.yearGoals;
   const [displayLog, setDisplayLog] = useState([
     {
@@ -60,7 +60,11 @@ export default function ChatPanel({ ampRef }) {
         messages: historyRef.current,
         system,
         uid: user.uid,
-        onProfileUpdated: setProfileLocal,
+        toolCtx: {
+          onProfileUpdated: setProfileLocal,
+          onCalendarChanged: bumpCalendarRefresh,
+          onStartTimer: startTimer,
+        },
       });
       historyRef.current = messages;
       const finalText = replyText || "(no reply)";

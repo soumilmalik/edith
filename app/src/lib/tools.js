@@ -94,7 +94,8 @@ export const TOOL_SCHEMAS = [
   },
   {
     name: "set_reminder",
-    description: "Create a reminder that will fire a notification while the app is open.",
+    description:
+      "Create a reminder for a specific future point in time (e.g. 'remind me to call mom at 6pm', 'remind me about the meeting tomorrow morning') - fires a notification while the app is open. For a short countdown from right now (e.g. 'set a timer for 10 minutes'), use start_timer instead, which shows a live visible countdown.",
     input_schema: {
       type: "object",
       properties: {
@@ -103,6 +104,19 @@ export const TOOL_SCHEMAS = [
         domain: { type: "string" },
       },
       required: ["text", "fireAt"],
+    },
+  },
+  {
+    name: "start_timer",
+    description:
+      "Start a countdown timer for N minutes from now, visible with a live countdown in the Timers panel. Use this for 'set a timer for X minutes', not set_reminder.",
+    input_schema: {
+      type: "object",
+      properties: {
+        minutes: { type: "number" },
+        label: { type: "string", description: "Optional short label, e.g. 'pasta'" },
+      },
+      required: ["minutes"],
     },
   },
   {
@@ -186,15 +200,22 @@ export async function executeTool(name, input, ctx) {
         };
       }
       const created = await cal.createEvent(input);
+      ctx.onCalendarChanged?.();
       return { created: true, id: created.id, htmlLink: created.htmlLink };
     }
     case "update_event": {
       const updated = await cal.updateEvent(input.eventId, input, input.calendarId || "primary");
+      ctx.onCalendarChanged?.();
       return { updated: true, id: updated.id };
     }
     case "delete_event": {
       await cal.deleteEvent(input.eventId, input.calendarId || "primary");
+      ctx.onCalendarChanged?.();
       return { deleted: true, id: input.eventId };
+    }
+    case "start_timer": {
+      ctx.onStartTimer?.(input.minutes, input.label || "");
+      return { started: true, minutes: input.minutes, label: input.label || "" };
     }
     case "log_health": {
       const date = input.date || todayKey();

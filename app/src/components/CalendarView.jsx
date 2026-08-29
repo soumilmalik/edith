@@ -27,7 +27,7 @@ function toLocalInput(dt) {
 const emptyForm = { id: null, title: "", start: "", end: "", domain: "", priority: 3 };
 
 export default function CalendarView() {
-  const { domains } = useAppState();
+  const { domains, calendarVersion } = useAppState();
   const [rangeMode, setRangeMode] = useState("week");
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -72,7 +72,10 @@ export default function CalendarView() {
 
   useEffect(() => {
     if (connected) load();
-  }, [connected, load]);
+    // calendarVersion: bumped from chat/voice or the upload-schedule flow
+    // after a create/update/delete, so this reloads without a manual Refresh.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connected, load, calendarVersion]);
 
   async function handleConnectClick() {
     setConnecting(true);

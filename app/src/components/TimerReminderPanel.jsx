@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/appState.js";
 import { listReminders, addReminder, dismissReminder } from "../lib/firebase.js";
+import { notify } from "../lib/notify.js";
 
 function fmt(ms) {
   const totalSec = Math.max(0, Math.floor(ms / 1000));
@@ -11,35 +12,8 @@ function fmt(ms) {
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
 }
 
-function beep() {
-  try {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    osc.frequency.value = 880;
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
-    osc.onended = () => ctx.close();
-  } catch {
-    // ignore if audio isn't available
-  }
-}
-
-function notify(title, body) {
-  beep();
-  // Bare `Notification` throws a ReferenceError on browsers that don't
-  // implement it at all (e.g. iOS Safari) - window.Notification is a safe
-  // property access instead, so use it everywhere, never the bare global.
-  if (window.Notification && window.Notification.permission === "granted") {
-    new window.Notification(title, { body });
-  }
-}
-
 export default function TimerReminderPanel() {
-  const { user } = useAppState();
+  const { user, timerRemainingMs, timerLabel, startTimer, cancelTimer } = useAppState();
 
   // Stopwatch
   const [swRunning, setSwRunning] = useState(false);
@@ -52,19 +26,9 @@ export default function TimerReminderPanel() {
     return () => clearInterval(id);
   }, [swRunning]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Timer
+  // Timer input (the running timer itself lives in appState so chat/voice
+  // ("set a timer for 10 minutes") starts the exact same one this shows).
   const [timerInputMin, setTimerInputMin] = useState(5);
-  const [timerRemaining, setTimerRemaining] = useState(null); // ms
-  useEffect(() => {
-    if (timerRemaining === null) return;
-    if (timerRemaining <= 0) {
-      notify("Time's up", "Your timer finished.");
-      setTimerRemaining(null);
-      return;
-    }
-    const id = setTimeout(() => setTimerRemaining((r) => r - 1000), 1000);
-    return () => clearTimeout(id);
-  }, [timerRemaining]);
 
   // Reminders
   const [reminders, setReminders] = useState([]);
@@ -130,7 +94,7 @@ export default function TimerReminderPanel() {
         Timer
       </div>
       <div className="row" style={{ marginBottom: 12 }}>
-        {timerRemaining === null ? (
+        {timerRemainingMs === null ? (
           <>
             <input
               type="number"
@@ -140,12 +104,13 @@ export default function TimerReminderPanel() {
               onChange={(e) => setTimerInputMin(Number(e.target.value))}
             />
             <span className="small">min</span>
-            <button onClick={() => setTimerRemaining(timerInputMin * 60 * 1000)}>Start</button>
+            <button onClick={() => startTimer(timerInputMin)}>Start</button>
           </>
         ) : (
           <>
-            <div className="glow-text">{fmt(timerRemaining)}</div>
-            <button onClick={() => setTimerRemaining(null)}>Cancel</button>
+            <div className="glow-text">{fmt(timerRemainingMs)}</div>
+            {timerLabel && <span className="badge">{timerLabel}</span>}
+            <button onClick={cancelTimer}>Cancel</button>
           </>
         )}
       </div>

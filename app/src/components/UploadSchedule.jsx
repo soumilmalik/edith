@@ -15,7 +15,7 @@ function fileToBase64(file) {
 }
 
 export default function UploadSchedule() {
-  const { domains } = useAppState();
+  const { domains, bumpCalendarRefresh } = useAppState();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [extracted, setExtracted] = useState(null); // [{title,start,end,domain}]
@@ -73,6 +73,7 @@ export default function UploadSchedule() {
         await cal.createEvent(ev);
       }
       setExtracted(null);
+      bumpCalendarRefresh();
     } catch (err) {
       setError(err.message);
     } finally {

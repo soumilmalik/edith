@@ -37,8 +37,9 @@ async function callWorker(body) {
 }
 
 // messages: [{role:'user'|'assistant', content: string | array}]
+// toolCtx: passed straight through to executeTool - {uid, onProfileUpdated, onCalendarChanged, onStartTimer}
 // Returns { messages: <updated full history>, replyText: <final assistant text> }
-export async function sendMessage({ messages, system, uid, onProfileUpdated }) {
+export async function sendMessage({ messages, system, uid, toolCtx = {} }) {
   let working = [...messages];
   let replyText = "";
 
@@ -59,7 +60,7 @@ export async function sendMessage({ messages, system, uid, onProfileUpdated }) {
     for (const use of toolUses) {
       let result;
       try {
-        result = await executeTool(use.name, use.input, { uid, onProfileUpdated });
+        result = await executeTool(use.name, use.input, { uid, ...toolCtx });
       } catch (err) {
         result = { error: String(err.message || err) };
       }
