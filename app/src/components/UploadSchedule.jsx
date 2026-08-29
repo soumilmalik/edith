@@ -2,17 +2,9 @@ import React, { useState } from "react";
 import { auth } from "../lib/firebase.js";
 import * as cal from "../lib/googleCalendar.js";
 import { useAppState } from "../state/appState.js";
+import { fileToBase64 } from "../lib/fileToBase64.js";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
-
-function fileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result.split(",")[1]);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 export default function UploadSchedule() {
   const { domains, bumpCalendarRefresh } = useAppState();

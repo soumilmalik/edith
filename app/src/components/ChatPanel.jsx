@@ -5,6 +5,7 @@ import { speakNeural, speakBrowser, primeVoices, unlockAudio } from "../lib/spee
 import { showDebugError } from "../lib/debugBanner.js";
 import { startScribeStream } from "../lib/scribeStream.js";
 import { auth } from "../lib/firebase.js";
+import { fileToBase64 } from "../lib/fileToBase64.js";
 import VoiceControls from "./VoiceControls.jsx";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
@@ -27,6 +28,10 @@ export default function ChatPanel({ ampRef }) {
   const [speaking, setSpeaking] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
   const [micError, setMicError] = useState("");
+  const [attachment, setAttachment] = useState(null); // { base64, mimeType, previewUrl, name }
+  const [attachError, setAttachError] = useState("");
+
+  const fileInputRef = useRef(null);
 
   const historyRef = useRef([]);
   const scribeRef = useRef(null);
@@ -45,15 +50,59 @@ export default function ChatPanel({ ampRef }) {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [displayLog, liveTranscript]);
 
+  async function handleAttachFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file) return;
+    setAttachError("");
+    if (file.size > 5 * 1024 * 1024) {
+      setAttachError("That file is too large (max ~5MB - Claude's own per-file limit).");
+      return;
+    }
+    try {
+      const base64 = await fileToBase64(file);
+      const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
+      setAttachment({ base64, mimeType: file.type, previewUrl, name: file.name });
+    } catch {
+      setAttachError("Couldn't read that file.");
+    }
+  }
+
+  function clearAttachment() {
+    if (attachment?.previewUrl) URL.revokeObjectURL(attachment.previewUrl);
+    setAttachment(null);
+  }
+
   // viaVoice: only replies to messages spoken through the mic get spoken
   // back - typed messages always get a text-only reply (saves TTS credits
   // and just makes sense: you typed because you wanted to read, not listen).
   async function handleSend(text, { viaVoice = false } = {}) {
     const trimmed = text.trim();
-    if (!trimmed || !user) return;
+    const att = attachment;
+    if (!trimmed && !att) return;
+    if (!user) return;
     setSending(true);
-    setDisplayLog((log) => [...log, { role: "user", text: trimmed }]);
-    historyRef.current = [...historyRef.current, { role: "user", content: trimmed }];
+
+    setDisplayLog((log) => [
+      ...log,
+      {
+        role: "user",
+        text: trimmed || (att ? "(sent an attachment)" : ""),
+        imagePreviewUrl: att?.previewUrl || null,
+        attachmentName: att && !att.previewUrl ? att.name : null,
+      },
+    ]);
+
+    const content = att
+      ? [
+          att.mimeType === "application/pdf"
+            ? { type: "document", source: { type: "base64", media_type: "application/pdf", data: att.base64 } }
+            : { type: "image", source: { type: "base64", media_type: att.mimeType, data: att.base64 } },
+          { type: "text", text: trimmed || "What's in this?" },
+        ]
+      : trimmed;
+    historyRef.current = [...historyRef.current, { role: "user", content }];
+    if (att) clearAttachment();
 
     try {
       const system = buildSystemPrompt({ profile, domains });
@@ -176,6 +225,8 @@ export default function ChatPanel({ ampRef }) {
       <div className="chat-log">
         {displayLog.map((m, i) => (
           <div key={i} className={`chat-msg ${m.role}`}>
+            {m.imagePreviewUrl && <img src={m.imagePreviewUrl} alt="attachment" className="chat-attachment-img" />}
+            {m.attachmentName && <div className="badge">{m.attachmentName}</div>}
             {m.text}
           </div>
         ))}
@@ -189,6 +240,23 @@ export default function ChatPanel({ ampRef }) {
           {micError}
         </div>
       )}
+      {attachError && (
+        <div className="small" style={{ color: "var(--danger)" }}>
+          {attachError}
+        </div>
+      )}
+      {attachment && (
+        <div className="row" style={{ marginBottom: 6 }}>
+          {attachment.previewUrl ? (
+            <img src={attachment.previewUrl} alt="attachment preview" className="chat-attachment-preview" />
+          ) : (
+            <span className="badge">{attachment.name}</span>
+          )}
+          <button type="button" onClick={clearAttachment}>
+            Remove
+          </button>
+        </div>
+      )}
       <VoiceControls listening={listening} speaking={speaking} onToggleMic={toggleMic} supported={MIC_SUPPORTED} />
       <form
         className="chat-input-row"
@@ -200,12 +268,27 @@ export default function ChatPanel({ ampRef }) {
         }}
       >
         <input
+          type="file"
+          accept="image/*,application/pdf"
+          ref={fileInputRef}
+          onChange={handleAttachFile}
+          hidden
+        />
+        <button
+          type="button"
+          title="Attach an image or PDF (like a syllabus)"
+          onClick={() => fileInputRef.current?.click()}
+          disabled={sending}
+        >
+          📎
+        </button>
+        <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Talk to Edith..."
           disabled={sending}
         />
-        <button type="submit" disabled={sending || !input.trim()}>
+        <button type="submit" disabled={sending || (!input.trim() && !attachment)}>
           Send
         </button>
       </form>

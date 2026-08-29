@@ -213,6 +213,22 @@ input[type="file"] {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.chat-attachment-img {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  border: 1px solid var(--panel-border);
+}
+
+.chat-attachment-preview {
+  max-height: 48px;
+  max-width: 48px;
+  border-radius: 6px;
+  border: 1px solid var(--panel-border);
+}
+
 .chat-msg.live-transcript {
   font-style: italic;
   color: var(--text-dim);
