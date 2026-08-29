@@ -1,5 +1,6 @@
 import * as cal from "./googleCalendar.js";
 import * as fb from "./firebase.js";
+import { pushAppleReminder } from "./appleReminders.js";
 
 // Claude tool schemas. Kept small and explicit so Claude always reasons
 // about conflicts/domains through the model, not hidden app logic.
@@ -237,7 +238,8 @@ export async function executeTool(name, input, ctx) {
         fireAt: input.fireAt,
         domain: input.domain || null,
       });
-      return { id, ...input };
+      const apple = await pushAppleReminder(input.text, input.fireAt);
+      return { id, ...input, appleReminders: apple.ok ? "synced" : `not synced: ${apple.error}` };
     }
     case "list_reminders": {
       return fb.listReminders(ctx.uid);

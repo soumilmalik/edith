@@ -11,9 +11,12 @@ FIREBASE_PROJECT_ID = "edith-506915"
 ALLOWED_ORIGIN = "https://soumilmalik.github.io,http://localhost:5173"
 # Not secret - same value as the frontend's VITE_GOOGLE_CLIENT_ID.
 GOOGLE_CLIENT_ID = "231274176288-egq6fs2ccpnhvbkqi2p1l8m17lhhdgfd.apps.googleusercontent.com"
+# Apple ID used for iCloud CalDAV (Reminders sync). Not secret by itself.
+APPLE_ID_EMAIL = "a999malik@gmail.com"
 
 # Set the real secrets with:
 #   wrangler secret put ANTHROPIC_API_KEY
 #   wrangler secret put GOOGLE_CLIENT_SECRET
 #   wrangler secret put ELEVENLABS_API_KEY
 #   wrangler secret put ELEVENLABS_VOICE_ID
+#   wrangler secret put APPLE_APP_PASSWORD

@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { createAppleReminder } from "./appleReminders.js";
 
 export interface Env {
   ANTHROPIC_API_KEY: string;
@@ -9,6 +10,8 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   ELEVENLABS_API_KEY: string;
   ELEVENLABS_VOICE_ID: string;
+  APPLE_ID_EMAIL: string;
+  APPLE_APP_PASSWORD: string;
 }
 
 const ANTHROPIC_MODEL = "claude-sonnet-5";
@@ -248,6 +251,22 @@ async function handleSttToken(request: Request, env: Env): Promise<Response> {
   return json(data, env);
 }
 
+// Pushes a reminder into the user's actual Apple Reminders app via iCloud
+// CalDAV, using an app-specific password (never the real Apple ID password).
+async function handleAppleReminder(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { text?: string; dueAt?: string };
+  if (!body?.text) return json({ error: "text is required" }, env, 400);
+  if (!env.APPLE_ID_EMAIL || !env.APPLE_APP_PASSWORD) {
+    return json({ error: "Apple Reminders sync isn't configured on the server yet" }, env, 501);
+  }
+  try {
+    await createAppleReminder(env.APPLE_ID_EMAIL, env.APPLE_APP_PASSWORD, { text: body.text, dueAt: body.dueAt });
+    return json({ ok: true }, env);
+  } catch (err: any) {
+    return json({ error: String(err?.message || err) }, env, 502);
+  }
+}
+
 export default {
   async fetch(request: Request, rawEnv: Env): Promise<Response> {
     // Resolve the multi-origin allowlist down to the single origin this
@@ -280,6 +299,9 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/api/stt/token") {
       return handleSttToken(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/api/reminders/apple") {
+      return handleAppleReminder(request, env);
     }
     return json({ error: "Not found" }, env, 404);
   },
