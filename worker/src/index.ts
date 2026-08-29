@@ -7,11 +7,9 @@ export interface Env {
   ALLOWED_ORIGIN: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
-  GOOGLE_TTS_API_KEY: string;
+  ELEVENLABS_API_KEY: string;
+  ELEVENLABS_VOICE_ID: string;
 }
-
-const TTS_VOICE_NAME = "en-GB-Neural2-F";
-const TTS_LANGUAGE_CODE = "en-GB";
 
 const ANTHROPIC_MODEL = "claude-sonnet-5";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -202,26 +200,39 @@ async function handleCalendarRefresh(request: Request, env: Env): Promise<Respon
   return json({ access_token: data.access_token, expires_in: data.expires_in }, env);
 }
 
-// Synthesizes speech via Google Cloud Text-to-Speech (Neural2) and returns
-// base64 MP3 audio for the frontend to play + analyse for orb reactivity.
+// Synthesizes speech via ElevenLabs and streams the raw MP3 bytes straight
+// back to the frontend (no base64 round-trip needed).
 async function handleTts(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as { text?: string };
-  const text = (body.text || "").slice(0, 5000); // Google's per-request cap
+  const text = (body.text || "").slice(0, 5000);
   if (!text.trim()) return json({ error: "text is required" }, env, 400);
 
-  const res = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${env.GOOGLE_TTS_API_KEY}`, {
+  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${env.ELEVENLABS_VOICE_ID}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
+    headers: {
+      "Content-Type": "application/json",
+      "xi-api-key": env.ELEVENLABS_API_KEY,
+      Accept: "audio/mpeg",
+    },
     body: JSON.stringify({
-      input: { text },
-      voice: { languageCode: TTS_LANGUAGE_CODE, name: TTS_VOICE_NAME },
-      audioConfig: { audioEncoding: "MP3" },
+      text,
+      // Flash v2.5: 0.5 credits/char (half the cost of the default model),
+      // and ElevenLabs' lowest-latency option - the right tradeoff for a
+      // real-time assistant on a free-tier credit budget.
+      model_id: "eleven_flash_v2_5",
+      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
     }),
   });
 
-  const data = (await res.json()) as any;
-  if (!res.ok) return json(data, env, res.status);
-  return json({ audioContent: data.audioContent }, env);
+  if (!res.ok) {
+    const errText = await res.text();
+    return json({ error: "ElevenLabs TTS failed", detail: errText }, env, res.status);
+  }
+
+  return new Response(res.body, {
+    status: 200,
+    headers: { "Content-Type": "audio/mpeg", ...corsHeaders(env) },
+  });
 }
 
 export default {

@@ -92,11 +92,8 @@ export async function speakNeural(text, { workerUrl, idToken, ampRef, onStart, o
       body: JSON.stringify({ text }),
     });
     if (!res.ok) throw new Error(await res.text());
-    const { audioContent } = await res.json();
-    if (!audioContent) throw new Error("No audio returned");
-
-    const bytes = Uint8Array.from(atob(audioContent), (c) => c.charCodeAt(0));
-    const blob = new Blob([bytes], { type: "audio/mpeg" });
+    const blob = await res.blob();
+    if (!blob.size) throw new Error("No audio returned");
     const url = URL.createObjectURL(blob);
     const audio = new Audio(url);
     currentAudio = audio;
