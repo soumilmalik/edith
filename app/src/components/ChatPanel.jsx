@@ -106,10 +106,16 @@ export default function ChatPanel({ ampRef }) {
         if (ampRef) ampRef.current = 0;
       },
       onError: (err) => {
-        // Falls back to the free browser voice, but surface the real reason
-        // instead of silently swallowing it - "it used the wrong voice"
-        // bugs are otherwise impossible to diagnose without live devtools.
-        showDebugError(`Neural voice failed, used browser fallback: ${err?.message || err}`);
+        // Falls back to the free browser voice. "paid_plan_required" is a
+        // known, expected state (free-tier ElevenLabs can't use library
+        // voices via the API) - stay quiet for that one so every single
+        // reply doesn't throw up an alarming banner; still surface anything
+        // genuinely unexpected loudly, since that's the only way to diagnose
+        // it without live devtools.
+        const message = err?.message || String(err);
+        if (!message.includes("paid_plan_required")) {
+          showDebugError(`Neural voice failed, used browser fallback: ${message}`);
+        }
         speakReplyFallback(text);
       },
     });
