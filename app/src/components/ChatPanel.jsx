@@ -50,10 +50,7 @@ export default function ChatPanel({ ampRef }) {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [displayLog, liveTranscript]);
 
-  async function handleAttachFile(e) {
-    const file = e.target.files?.[0];
-    e.target.value = "";
-    if (!file) return;
+  async function attachFile(file) {
     setAttachError("");
     if (file.size > 5 * 1024 * 1024) {
       setAttachError("That file is too large (max ~5MB - Claude's own per-file limit).");
@@ -62,9 +59,32 @@ export default function ChatPanel({ ampRef }) {
     try {
       const base64 = await fileToBase64(file);
       const previewUrl = file.type.startsWith("image/") ? URL.createObjectURL(file) : null;
-      setAttachment({ base64, mimeType: file.type, previewUrl, name: file.name });
+      const name = file.name || `pasted-image.${(file.type.split("/")[1] || "png").split("+")[0]}`;
+      setAttachment({ base64, mimeType: file.type, previewUrl, name });
     } catch {
       setAttachError("Couldn't read that file.");
+    }
+  }
+
+  function handleAttachFile(e) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) attachFile(file);
+  }
+
+  // Paste an image straight from the clipboard, like Claude's own chat.
+  function handlePaste(e) {
+    const items = e.clipboardData?.items;
+    if (!items) return;
+    for (const item of items) {
+      if (item.type.startsWith("image/")) {
+        const file = item.getAsFile();
+        if (file) {
+          e.preventDefault();
+          attachFile(file);
+        }
+        return;
+      }
     }
   }
 
@@ -285,7 +305,8 @@ export default function ChatPanel({ ampRef }) {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder="Talk to Edith..."
+          onPaste={handlePaste}
+          placeholder="Talk to Edith... (paste an image too)"
           disabled={sending}
         />
         <button type="submit" disabled={sending || (!input.trim() && !attachment)}>
