@@ -18,6 +18,19 @@ function startOfWeek(d) {
   return x;
 }
 
+function formatEventRange(startRaw, endRaw) {
+  const start = new Date(startRaw);
+  const end = new Date(endRaw);
+  const dateStr = start.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  const timeOpts = { hour: "2-digit", minute: "2-digit", hour12: false };
+  const startTime = start.toLocaleTimeString([], timeOpts);
+  const endTime = end.toLocaleTimeString([], timeOpts);
+  const sameDay = start.toDateString() === end.toDateString();
+  if (sameDay) return `${dateStr} · ${startTime}–${endTime}`;
+  const endDateStr = end.toLocaleDateString([], { weekday: "short", month: "short", day: "numeric" });
+  return `${dateStr} ${startTime} – ${endDateStr} ${endTime}`;
+}
+
 function toLocalInput(dt) {
   const d = new Date(dt);
   const pad = (n) => String(n).padStart(2, "0");
@@ -175,7 +188,7 @@ export default function CalendarView() {
               {e.summary} {e.calendarName && <span className="badge">{e.calendarName}</span>}
             </div>
             <div className="small">
-              {new Date(e.start?.dateTime || e.start?.date).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
+              {formatEventRange(e.start?.dateTime || e.start?.date, e.end?.dateTime || e.end?.date)}
             </div>
           </div>
           <div className="row">

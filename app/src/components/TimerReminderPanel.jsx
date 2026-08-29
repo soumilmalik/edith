@@ -127,7 +127,7 @@ export default function TimerReminderPanel() {
         <div className="list-item" key={r.id}>
           <div>
             <div>{r.text}</div>
-            <div className="small">{new Date(r.fireAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</div>
+            <div className="small">{new Date(r.fireAt).toLocaleString([], { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit", hour12: false })}</div>
           </div>
           <button
             onClick={async () => {
