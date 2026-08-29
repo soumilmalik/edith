@@ -34,7 +34,7 @@ export const TOOL_SCHEMAS = [
   {
     name: "create_event",
     description:
-      "Create a calendar event. Always call list_events for the same window first if you haven't already this turn, to check for conflicts.",
+      "Create a calendar event. If it overlaps an existing event, this returns the conflict instead of creating anything - discuss it with the user, then if they want both events kept (a deliberate double-booking), call this again with confirmed:true to actually create it despite the overlap.",
     input_schema: {
       type: "object",
       properties: {
@@ -44,6 +44,10 @@ export const TOOL_SCHEMAS = [
         end: { type: "string", description: "ISO datetime" },
         domain: { type: "string", description: "Life domain this belongs to" },
         priority: { type: "integer", description: "1 (low) to 5 (critical)" },
+        confirmed: {
+          type: "boolean",
+          description: "Set true only after the user has explicitly confirmed they want this created despite a reported conflict",
+        },
       },
       required: ["title", "start", "end"],
     },
@@ -137,6 +141,15 @@ export const TOOL_SCHEMAS = [
     name: "list_reminders",
     description: "List all pending reminders.",
     input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "delete_reminder",
+    description: "Delete/dismiss a reminder by its id (from list_reminders).",
+    input_schema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    },
   },
   {
     name: "update_profile",
@@ -247,14 +260,16 @@ export async function executeTool(name, input, ctx) {
       };
     }
     case "create_event": {
-      const existing = await cal.listEvents(input.start, input.end);
-      const conflicts = existing.filter((e) => e.status !== "cancelled");
-      if (conflicts.length > 0) {
-        return {
-          conflict: true,
-          conflictingEvents: conflicts.map(simplifyEvent),
-          note: "Overlapping event(s) found. Weigh priority/domain/proximity to deadlines and discuss with the user before creating, updating, or deleting anything - see the system prompt's conflict-resolution guidance.",
-        };
+      if (!input.confirmed) {
+        const existing = await cal.listEvents(input.start, input.end);
+        const conflicts = existing.filter((e) => e.status !== "cancelled");
+        if (conflicts.length > 0) {
+          return {
+            conflict: true,
+            conflictingEvents: conflicts.map(simplifyEvent),
+            note: "Overlapping event(s) found. Weigh priority/domain/proximity to deadlines and discuss with the user before creating, updating, or deleting anything - see the system prompt's conflict-resolution guidance. If the user wants both kept, call create_event again with confirmed:true.",
+          };
+        }
       }
       const created = await cal.createEvent(input);
       ctx.onCalendarChanged?.();
@@ -299,6 +314,10 @@ export async function executeTool(name, input, ctx) {
     }
     case "list_reminders": {
       return fb.listReminders(ctx.uid);
+    }
+    case "delete_reminder": {
+      await fb.dismissReminder(ctx.uid, input.id);
+      return { deleted: true, id: input.id };
     }
     case "update_profile": {
       const current = await fb.getProfile(ctx.uid);

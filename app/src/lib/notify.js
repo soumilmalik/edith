@@ -3,12 +3,18 @@ function beep() {
     const ctx = new (window.AudioContext || window.webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
-    osc.frequency.value = 880;
+    osc.type = "sine";
+    osc.frequency.value = 660;
     osc.connect(gain);
     gain.connect(ctx.destination);
-    gain.gain.setValueAtTime(0.15, ctx.currentTime);
-    osc.start();
-    osc.stop(ctx.currentTime + 0.4);
+    // Fade in/out instead of a hard on/off click - a soft, short chime
+    // rather than an alarm-like beep.
+    const t0 = ctx.currentTime;
+    gain.gain.setValueAtTime(0, t0);
+    gain.gain.linearRampToValueAtTime(0.06, t0 + 0.05);
+    gain.gain.linearRampToValueAtTime(0, t0 + 0.3);
+    osc.start(t0);
+    osc.stop(t0 + 0.3);
     osc.onended = () => ctx.close();
   } catch {
     // ignore if audio isn't available

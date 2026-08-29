@@ -45,19 +45,40 @@ export default function TimerReminderPanel() {
     if (window.Notification && window.Notification.permission === "default") {
       window.Notification.requestPermission().catch(() => {});
     }
-    refreshReminders();
-    const id = setInterval(async () => {
+
+    // "Already fired" memory lived only in this component's state, so
+    // switching mobile tabs away and back (which unmounts/remounts this
+    // panel) reset it and re-beeped for every still-overdue reminder each
+    // time - the "regular beeping" bug. Fix: the very first check after
+    // mount only *primes* firedRef (marks whatever's already overdue as
+    // seen, silently) instead of notifying for it; only reminders that
+    // become newly due *after* that count as fresh.
+    let primed = false;
+
+    async function check() {
       if (!user) return;
       const list = await listReminders(user.uid);
       setReminders(list);
       const now = Date.now();
-      for (const r of list) {
-        if (!firedRef.current.has(r.id) && new Date(r.fireAt).getTime() <= now) {
-          firedRef.current.add(r.id);
-          notify("Reminder", r.text);
-        }
+
+      if (!primed) {
+        primed = true;
+        list.forEach((r) => firedRef.current.add(r.id));
+        return;
       }
-    }, 15000);
+
+      const newlyDue = list.filter((r) => !firedRef.current.has(r.id) && new Date(r.fireAt).getTime() <= now);
+      if (newlyDue.length > 0) {
+        newlyDue.forEach((r) => firedRef.current.add(r.id));
+        // One beep total even if several became due in the same check, not
+        // one per reminder - avoids a burst of beeps.
+        if (newlyDue.length === 1) notify("Reminder", newlyDue[0].text);
+        else notify("Reminders", newlyDue.map((r) => r.text).join(", "));
+      }
+    }
+
+    check();
+    const id = setInterval(check, 15000);
     return () => clearInterval(id);
   }, [user]); // eslint-disable-line react-hooks/exhaustive-deps
 

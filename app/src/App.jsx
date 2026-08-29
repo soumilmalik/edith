@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { AppStateProvider, useAppState } from "./state/appState.js";
 import Login from "./components/Login.jsx";
 import Clock from "./components/Clock.jsx";
@@ -49,15 +49,30 @@ function Dashboard() {
 
 function Gate() {
   const { user, authorized, loadingData } = useAppState();
+  // "loading" (red) -> "online" (blue, brief "EDITH ONLINE") -> "done" (dashboard)
+  const [bootPhase, setBootPhase] = useState("loading");
+
+  const isReady = user && authorized && !loadingData;
+
+  useEffect(() => {
+    if (isReady && bootPhase === "loading") {
+      setBootPhase("online");
+      const t = setTimeout(() => setBootPhase("done"), 900);
+      return () => clearTimeout(t);
+    }
+  }, [isReady, bootPhase]);
 
   if (user === undefined) {
-    return <div className="login-screen glow-text">Loading...</div>;
+    return <div className="login-screen glow-text theme-red">EDITH BOOTING...</div>;
   }
   if (!user || !authorized) {
     return <Login />;
   }
-  if (loadingData) {
-    return <div className="login-screen glow-text">Booting EDITH...</div>;
+  if (!isReady || bootPhase === "loading") {
+    return <div className="login-screen glow-text theme-red">EDITH BOOTING...</div>;
+  }
+  if (bootPhase === "online") {
+    return <div className="login-screen glow-text">EDITH ONLINE</div>;
   }
   return <Dashboard />;
 }
