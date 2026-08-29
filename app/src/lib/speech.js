@@ -7,15 +7,16 @@ export function isSpeechRecognitionSupported() {
   return !!SpeechRecognitionImpl;
 }
 
-export function createRecognizer({ onResult, onEnd, onStart }) {
+export function createRecognizer({ onResult, onEnd, onStart, onError, continuous = false }) {
   if (!SpeechRecognitionImpl) return null;
   const recognizer = new SpeechRecognitionImpl();
-  recognizer.continuous = false;
+  recognizer.continuous = continuous;
   recognizer.interimResults = true;
   recognizer.lang = "en-US";
 
   recognizer.onstart = () => onStart?.();
   recognizer.onend = () => onEnd?.();
+  recognizer.onerror = (e) => onError?.(e);
   recognizer.onresult = (event) => {
     let finalText = "";
     let interimText = "";
@@ -27,6 +28,12 @@ export function createRecognizer({ onResult, onEnd, onStart }) {
     onResult?.({ finalText, interimText });
   };
   return recognizer;
+}
+
+const WAKE_PHRASE_RE = /\b(hey|hi|ok|okay)\s+edith\b/i;
+
+export function containsWakePhrase(text) {
+  return WAKE_PHRASE_RE.test(text || "");
 }
 
 let cachedVoice = null;

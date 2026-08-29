@@ -8,6 +8,7 @@ import {
   speakBrowser,
   primeVoices,
   createMicAnalyser,
+  containsWakePhrase,
 } from "../lib/speech.js";
 import { auth } from "../lib/firebase.js";
 import VoiceControls from "./VoiceControls.jsx";
@@ -29,9 +30,14 @@ export default function ChatPanel({ ampRef }) {
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [wakeEnabled, setWakeEnabled] = useState(false);
+  const [wakeActive, setWakeActive] = useState(false); // background recognizer actually running
 
   const historyRef = useRef([]);
   const recognizerRef = useRef(null);
+  const wakeRecognizerRef = useRef(null);
+  const wakeRestartTimeoutRef = useRef(null);
+  const wakeFatalErrorRef = useRef(false);
   const analyserRef = useRef(null);
   const logEndRef = useRef(null);
   const speakPulseId = useRef(null);
@@ -39,6 +45,13 @@ export default function ChatPanel({ ampRef }) {
   useEffect(() => {
     primeVoices();
   }, []);
+
+  useEffect(() => {
+    if (wakeEnabled) startWakeListening();
+    else stopWakeListening();
+    return () => stopWakeListening();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wakeEnabled]);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -104,12 +117,11 @@ export default function ChatPanel({ ampRef }) {
     });
   }
 
-  async function toggleMic() {
-    if (listening) {
-      recognizerRef.current?.stop();
-      return;
-    }
-    if (!isSpeechRecognitionSupported()) return;
+  // Captures one spoken command. Used both by the manual mic button and by
+  // wake-word detection - either way, this is what actually sends to Edith.
+  function startCommandListening() {
+    if (!isSpeechRecognitionSupported() || listening) return;
+    stopWakeListening();
 
     const recognizer = createRecognizer({
       onStart: async () => {
@@ -126,6 +138,7 @@ export default function ChatPanel({ ampRef }) {
         analyserRef.current?.stop();
         analyserRef.current = null;
         if (ampRef) ampRef.current = 0;
+        if (wakeEnabled) startWakeListening();
       },
       onResult: ({ finalText }) => {
         if (finalText) handleSend(finalText, { viaVoice: true });
@@ -135,11 +148,65 @@ export default function ChatPanel({ ampRef }) {
     recognizer.start();
   }
 
+  function toggleMic() {
+    if (listening) {
+      recognizerRef.current?.stop();
+      return;
+    }
+    startCommandListening();
+  }
+
   function pumpMicAmplitude() {
     if (!analyserRef.current) return;
     const amp = analyserRef.current.getAmplitude();
     if (ampRef) ampRef.current = amp;
     if (analyserRef.current) requestAnimationFrame(pumpMicAmplitude);
+  }
+
+  // Background always-on listener for "hey Edith" / "ok Edith" etc. Runs
+  // continuously and restarts itself (browsers stop continuous recognition
+  // after periods of silence), except after a fatal permission error.
+  function startWakeListening() {
+    if (!isSpeechRecognitionSupported() || wakeRecognizerRef.current || listening) return;
+    clearTimeout(wakeRestartTimeoutRef.current);
+    wakeFatalErrorRef.current = false;
+
+    const recognizer = createRecognizer({
+      continuous: true,
+      onStart: () => setWakeActive(true),
+      onResult: ({ finalText, interimText }) => {
+        if (containsWakePhrase(finalText) || containsWakePhrase(interimText)) {
+          wakeRecognizerRef.current?.stop();
+          startCommandListening();
+        }
+      },
+      onError: (e) => {
+        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
+          wakeFatalErrorRef.current = true;
+          setWakeEnabled(false);
+        }
+      },
+      onEnd: () => {
+        setWakeActive(false);
+        wakeRecognizerRef.current = null;
+        if (wakeEnabled && !wakeFatalErrorRef.current && !listening) {
+          wakeRestartTimeoutRef.current = setTimeout(startWakeListening, 300);
+        }
+      },
+    });
+    if (!recognizer) return;
+    wakeRecognizerRef.current = recognizer;
+    try {
+      recognizer.start();
+    } catch {
+      wakeRecognizerRef.current = null;
+    }
+  }
+
+  function stopWakeListening() {
+    clearTimeout(wakeRestartTimeoutRef.current);
+    wakeRecognizerRef.current?.stop();
+    wakeRecognizerRef.current = null;
   }
 
   return (
@@ -158,6 +225,9 @@ export default function ChatPanel({ ampRef }) {
         speaking={speaking}
         onToggleMic={toggleMic}
         supported={isSpeechRecognitionSupported()}
+        wakeEnabled={wakeEnabled}
+        wakeActive={wakeActive}
+        onToggleWake={() => setWakeEnabled((v) => !v)}
       />
       <form
         className="chat-input-row"
