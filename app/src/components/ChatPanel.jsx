@@ -37,21 +37,43 @@ export default function ChatPanel({ ampRef }) {
   const recognizerRef = useRef(null);
   const wakeRecognizerRef = useRef(null);
   const wakeRestartTimeoutRef = useRef(null);
-  const wakeFatalErrorRef = useRef(false);
   const analyserRef = useRef(null);
   const logEndRef = useRef(null);
   const speakPulseId = useRef(null);
+
+  // Only one SpeechRecognition session may be alive at a time page-wide;
+  // starting a new one before the old one's onend has actually fired throws
+  // (silently, since callers didn't await it) and leaves everything stuck.
+  // These refs are the single source of truth for transitions - React state
+  // below mirrors them purely for rendering, never for control-flow
+  // decisions inside recognizer callbacks (which would otherwise close over
+  // stale values).
+  const modeRef = useRef("idle"); // "idle" | "wake" | "command"
+  const wakeEnabledRef = useRef(false);
+  const wantCommandAfterStopRef = useRef(false);
 
   useEffect(() => {
     primeVoices();
   }, []);
 
   useEffect(() => {
-    if (wakeEnabled) startWakeListening();
-    else stopWakeListening();
-    return () => stopWakeListening();
+    wakeEnabledRef.current = wakeEnabled;
+    if (wakeEnabled) {
+      if (modeRef.current === "idle") startWakeListening();
+    } else if (modeRef.current === "wake") {
+      wakeRecognizerRef.current?.stop();
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [wakeEnabled]);
+
+  useEffect(
+    () => () => {
+      clearTimeout(wakeRestartTimeoutRef.current);
+      wakeRecognizerRef.current?.stop();
+      recognizerRef.current?.stop();
+    },
+    []
+  );
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -119,12 +141,14 @@ export default function ChatPanel({ ampRef }) {
 
   // Captures one spoken command. Used both by the manual mic button and by
   // wake-word detection - either way, this is what actually sends to Edith.
-  function startCommandListening() {
-    if (!isSpeechRecognitionSupported() || listening) return;
-    stopWakeListening();
+  // Only call this when modeRef is "idle": if wake is currently running, go
+  // through requestCommandListening() instead so we wait for its real stop.
+  function startCommandListeningNow() {
+    if (!isSpeechRecognitionSupported() || modeRef.current !== "idle") return;
 
     const recognizer = createRecognizer({
       onStart: async () => {
+        modeRef.current = "command";
         setListening(true);
         try {
           analyserRef.current = await createMicAnalyser();
@@ -134,26 +158,47 @@ export default function ChatPanel({ ampRef }) {
         }
       },
       onEnd: () => {
+        modeRef.current = "idle";
         setListening(false);
         analyserRef.current?.stop();
         analyserRef.current = null;
         if (ampRef) ampRef.current = 0;
-        if (wakeEnabled) startWakeListening();
+        recognizerRef.current = null;
+        if (wakeEnabledRef.current) startWakeListening();
       },
       onResult: ({ finalText }) => {
         if (finalText) handleSend(finalText, { viaVoice: true });
       },
     });
+    if (!recognizer) return;
     recognizerRef.current = recognizer;
-    recognizer.start();
+    try {
+      recognizer.start();
+    } catch {
+      recognizerRef.current = null;
+      modeRef.current = "idle";
+    }
+  }
+
+  // Entry point for both the manual mic button and wake-word detection.
+  // Safe to call from any mode - if wake is active, stops it first and lets
+  // its onEnd hand off to the command recognizer once it's actually gone.
+  function requestCommandListening() {
+    if (modeRef.current === "command") return;
+    if (modeRef.current === "wake") {
+      wantCommandAfterStopRef.current = true;
+      wakeRecognizerRef.current?.stop();
+      return;
+    }
+    startCommandListeningNow();
   }
 
   function toggleMic() {
-    if (listening) {
+    if (modeRef.current === "command") {
       recognizerRef.current?.stop();
       return;
     }
-    startCommandListening();
+    requestCommandListening();
   }
 
   function pumpMicAmplitude() {
@@ -165,31 +210,39 @@ export default function ChatPanel({ ampRef }) {
 
   // Background always-on listener for "hey Edith" / "ok Edith" etc. Runs
   // continuously and restarts itself (browsers stop continuous recognition
-  // after periods of silence), except after a fatal permission error.
+  // after periods of silence), except after a fatal permission error or if
+  // the user turned the toggle off.
   function startWakeListening() {
-    if (!isSpeechRecognitionSupported() || wakeRecognizerRef.current || listening) return;
+    if (!isSpeechRecognitionSupported() || modeRef.current !== "idle" || !wakeEnabledRef.current) return;
     clearTimeout(wakeRestartTimeoutRef.current);
-    wakeFatalErrorRef.current = false;
 
     const recognizer = createRecognizer({
       continuous: true,
-      onStart: () => setWakeActive(true),
+      onStart: () => {
+        modeRef.current = "wake";
+        setWakeActive(true);
+      },
       onResult: ({ finalText, interimText }) => {
         if (containsWakePhrase(finalText) || containsWakePhrase(interimText)) {
+          wantCommandAfterStopRef.current = true;
           wakeRecognizerRef.current?.stop();
-          startCommandListening();
         }
       },
       onError: (e) => {
         if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          wakeFatalErrorRef.current = true;
+          wakeEnabledRef.current = false;
           setWakeEnabled(false);
         }
       },
       onEnd: () => {
+        modeRef.current = "idle";
         setWakeActive(false);
         wakeRecognizerRef.current = null;
-        if (wakeEnabled && !wakeFatalErrorRef.current && !listening) {
+        const wantsCommand = wantCommandAfterStopRef.current;
+        wantCommandAfterStopRef.current = false;
+        if (wantsCommand) {
+          startCommandListeningNow();
+        } else if (wakeEnabledRef.current) {
           wakeRestartTimeoutRef.current = setTimeout(startWakeListening, 300);
         }
       },
@@ -200,13 +253,8 @@ export default function ChatPanel({ ampRef }) {
       recognizer.start();
     } catch {
       wakeRecognizerRef.current = null;
+      modeRef.current = "idle";
     }
-  }
-
-  function stopWakeListening() {
-    clearTimeout(wakeRestartTimeoutRef.current);
-    wakeRecognizerRef.current?.stop();
-    wakeRecognizerRef.current = null;
   }
 
   return (
