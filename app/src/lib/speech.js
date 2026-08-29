@@ -39,17 +39,33 @@ export function speakBrowser(text, { onBoundary, onEnd } = {}) {
 }
 
 let currentAudio = null;
-let currentAudioCtx = null;
+
+// A single persistent AudioContext, not a fresh one per playback. iOS Safari
+// only allows audio to start from inside a real user gesture (tap); the TTS
+// reply arrives well after that (a Claude round-trip later), so a *new*
+// AudioContext/Audio element at that point gets silently blocked. Once this
+// shared context has been resumed by an actual tap (see unlockAudio below),
+// it stays "unlocked" for the rest of the page session, so reusing it for
+// every later playback - even ones triggered from async code - keeps working.
+let sharedAudioCtx = null;
+function getAudioContext() {
+  if (!sharedAudioCtx) sharedAudioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  return sharedAudioCtx;
+}
+
+// Call this synchronously from inside a real click/tap handler (e.g. the mic
+// button) before any await, so the resume() call still carries that tap's
+// user-activation. Safe to call repeatedly.
+export function unlockAudio() {
+  const ctx = getAudioContext();
+  if (ctx.state === "suspended") ctx.resume().catch(() => {});
+}
 
 export function stopSpeaking() {
   window.speechSynthesis?.cancel();
   if (currentAudio) {
     currentAudio.pause();
     currentAudio = null;
-  }
-  if (currentAudioCtx) {
-    currentAudioCtx.close().catch(() => {});
-    currentAudioCtx = null;
   }
 }
 
@@ -71,8 +87,8 @@ export async function speakNeural(text, { workerUrl, idToken, ampRef, onStart, o
     const audio = new Audio(url);
     currentAudio = audio;
 
-    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    currentAudioCtx = audioCtx;
+    const audioCtx = getAudioContext();
+    if (audioCtx.state === "suspended") await audioCtx.resume().catch(() => {});
     const source = audioCtx.createMediaElementSource(audio);
     const analyser = audioCtx.createAnalyser();
     analyser.fftSize = 256;
@@ -92,8 +108,8 @@ export async function speakNeural(text, { workerUrl, idToken, ampRef, onStart, o
       if (ampRef) ampRef.current = 0;
       URL.revokeObjectURL(url);
       if (currentAudio === audio) currentAudio = null;
-      if (currentAudioCtx === audioCtx) currentAudioCtx = null;
-      audioCtx.close().catch(() => {});
+      source.disconnect();
+      analyser.disconnect();
       onEnd?.();
     };
 

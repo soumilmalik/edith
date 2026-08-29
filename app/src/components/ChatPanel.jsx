@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/appState.js";
 import { sendMessage, buildSystemPrompt } from "../lib/claudeClient.js";
-import { speakNeural, speakBrowser, primeVoices } from "../lib/speech.js";
+import { speakNeural, speakBrowser, primeVoices, unlockAudio } from "../lib/speech.js";
 import { startScribeStream } from "../lib/scribeStream.js";
 import { auth } from "../lib/firebase.js";
 import VoiceControls from "./VoiceControls.jsx";
@@ -113,6 +113,12 @@ export default function ChatPanel({ ampRef }) {
       scribeRef.current?.stop();
       return;
     }
+
+    // Must run synchronously inside this click handler (before any await) so
+    // it still carries the tap's user-activation - this is what lets the TTS
+    // reply play later, after the async round-trip to Claude, without iOS
+    // Safari's autoplay policy silently blocking it.
+    unlockAudio();
 
     setMicError("");
     committedRef.current = "";
