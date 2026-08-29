@@ -122,7 +122,10 @@ export default function ChatPanel({ ampRef }) {
         ]
       : trimmed;
     historyRef.current = [...historyRef.current, { role: "user", content }];
-    if (att) clearAttachment();
+    // Don't revoke the preview URL here (unlike the explicit "Remove"
+    // button) - the chat log entry above just started using that exact same
+    // URL for its thumbnail, and revoking it immediately broke that image.
+    setAttachment(null);
 
     try {
       const system = buildSystemPrompt({ profile, domains });
