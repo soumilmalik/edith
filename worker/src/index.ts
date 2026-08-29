@@ -7,7 +7,11 @@ export interface Env {
   ALLOWED_ORIGIN: string;
   GOOGLE_CLIENT_ID: string;
   GOOGLE_CLIENT_SECRET: string;
+  GOOGLE_TTS_API_KEY: string;
 }
+
+const TTS_VOICE_NAME = "en-GB-Neural2-F";
+const TTS_LANGUAGE_CODE = "en-GB";
 
 const ANTHROPIC_MODEL = "claude-sonnet-5";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -198,6 +202,28 @@ async function handleCalendarRefresh(request: Request, env: Env): Promise<Respon
   return json({ access_token: data.access_token, expires_in: data.expires_in }, env);
 }
 
+// Synthesizes speech via Google Cloud Text-to-Speech (Neural2) and returns
+// base64 MP3 audio for the frontend to play + analyse for orb reactivity.
+async function handleTts(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { text?: string };
+  const text = (body.text || "").slice(0, 5000); // Google's per-request cap
+  if (!text.trim()) return json({ error: "text is required" }, env, 400);
+
+  const res = await fetch(`https://texttospeech.googleapis.com/v1/text:synthesize?key=${env.GOOGLE_TTS_API_KEY}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      input: { text },
+      voice: { languageCode: TTS_LANGUAGE_CODE, name: TTS_VOICE_NAME },
+      audioConfig: { audioEncoding: "MP3" },
+    }),
+  });
+
+  const data = (await res.json()) as any;
+  if (!res.ok) return json(data, env, res.status);
+  return json({ audioContent: data.audioContent }, env);
+}
+
 export default {
   async fetch(request: Request, rawEnv: Env): Promise<Response> {
     // Resolve the multi-origin allowlist down to the single origin this
@@ -224,6 +250,9 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/api/calendar/refresh") {
       return handleCalendarRefresh(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/api/tts") {
+      return handleTts(request, env);
     }
     return json({ error: "Not found" }, env, 404);
   },

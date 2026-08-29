@@ -4,11 +4,15 @@ import { sendMessage, buildSystemPrompt } from "../lib/claudeClient.js";
 import {
   createRecognizer,
   isSpeechRecognitionSupported,
-  speak,
+  speakNeural,
+  speakBrowser,
   primeVoices,
   createMicAnalyser,
 } from "../lib/speech.js";
+import { auth } from "../lib/firebase.js";
 import VoiceControls from "./VoiceControls.jsx";
+
+const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 
 export default function ChatPanel({ ampRef }) {
   const { user, profile, domains, setProfileLocal } = useAppState();
@@ -67,9 +71,8 @@ export default function ChatPanel({ ampRef }) {
     }
   }
 
-  function speakReply(text) {
-    setSpeaking(true);
-    speak(text, {
+  function speakReplyFallback(text) {
+    speakBrowser(text, {
       onBoundary: () => {
         if (ampRef) ampRef.current = 0.8;
         clearTimeout(speakPulseId.current);
@@ -81,6 +84,21 @@ export default function ChatPanel({ ampRef }) {
         setSpeaking(false);
         if (ampRef) ampRef.current = 0;
       },
+    });
+  }
+
+  async function speakReply(text) {
+    setSpeaking(true);
+    const idToken = await auth.currentUser?.getIdToken();
+    speakNeural(text, {
+      workerUrl: WORKER_URL,
+      idToken,
+      ampRef,
+      onEnd: () => {
+        setSpeaking(false);
+        if (ampRef) ampRef.current = 0;
+      },
+      onError: () => speakReplyFallback(text), // e.g. TTS not configured yet
     });
   }
 
