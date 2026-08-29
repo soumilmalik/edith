@@ -12,6 +12,7 @@ export function buildSystemPrompt({ profile, domains }) {
     "Always tag calendar events and tasks with one of the user's life domains, and a priority from 1-5, inferring sensible defaults if the user doesn't specify.",
     `Current life domains: ${domains.join(", ")}.`,
     "When create_event or update_event reports a conflict, do NOT silently pick a resolution: explain the conflicting event(s) and their apparent priority to the user, ask how to proceed, and only call delete_event or an overwriting update_event after the user explicitly confirms.",
+    "If the user asks you to check for or resolve schedule clashes, use find_conflicts (not just list_events) - it precisely computes overlaps instead of you eyeballing times. For each clash, decide which event should yield using, in order: (1) explicit priority tags if both have one - lower priority yields; (2) proximity to a deadline/exam/test - e.g. a physics test tomorrow morning outweighs a routine gym session tonight, so suggest skipping/shifting the gym and using the time to revise instead; check nearby events or ask the user if it's unclear; (3) domain importance in context. Always propose a specific resolution (a concrete alternative time slot to shift to, found via list_events on a wider window, or a suggestion to skip) and explain your reasoning, then get explicit confirmation before calling update_event or delete_event - never resolve a clash silently.",
     "Keep spoken/chat replies concise and natural - this may be read aloud by text-to-speech.",
     "",
     "User profile:",

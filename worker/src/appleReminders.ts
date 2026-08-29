@@ -46,6 +46,14 @@ function firstHref(node: any): string | null {
   return typeof href === "string" ? href : href["#text"] || null;
 }
 
+// Apple's PROPFIND responses sometimes return an href as a full absolute URL
+// (scheme+host+port) and sometimes as a server-relative path - blindly
+// prepending the shard origin onto an already-absolute href produces a
+// mangled double-URL. Only prepend when it's actually relative.
+function resolveUrl(origin: string, href: string): string {
+  return /^https?:\/\//i.test(href) ? href : `${origin}${href}`;
+}
+
 async function discoverTodoCollection(email: string, appPassword: string) {
   // 1. Who am I?
   const step1 = await propfind(
@@ -60,7 +68,7 @@ async function discoverTodoCollection(email: string, appPassword: string) {
 
   // 2. Where do my calendars/reminders live?
   const step2 = await propfind(
-    `${step1.shardOrigin}${principalHref}`,
+    resolveUrl(step1.shardOrigin, principalHref),
     email,
     appPassword,
     "0",
@@ -70,23 +78,55 @@ async function discoverTodoCollection(email: string, appPassword: string) {
   if (!homeHref) throw new Error("Could not discover calendar-home-set");
 
   // 3. List collections, find one that supports VTODO (a Reminders list).
+  const homeUrl = resolveUrl(step2.shardOrigin, homeHref);
   const step3 = await propfind(
-    `${step2.shardOrigin}${homeHref}`,
+    homeUrl,
     email,
     appPassword,
     "1",
     `<?xml version="1.0" encoding="utf-8"?><propfind xmlns="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav"><prop><resourcetype/><displayname/><C:supported-calendar-component-set/></prop></propfind>`
   );
+  // Compares via the URL object (not raw strings) so an explicit ":443" vs
+  // an omitted default port - which Apple's server is inconsistent about
+  // across these two responses - doesn't cause a false "different URL".
+  const normalize = (u: string) => {
+    try {
+      const x = new URL(u);
+      return x.origin + x.pathname.replace(/\/?$/, "/");
+    } catch {
+      return u;
+    }
+  };
+  let chosen: { shardOrigin: string; collectionUrl: string } | null = null;
+  const seen: string[] = [];
   for (const r of multistatusResponses(step3.xml)) {
-    const comps = r?.propstat?.prop?.["supported-calendar-component-set"]?.comp;
+    const href = firstHref(r);
+    if (!href) continue;
+    const url = resolveUrl(step3.shardOrigin, href);
+    const prop = r?.propstat?.prop || {};
+    const comps = prop["supported-calendar-component-set"]?.comp;
     const compList = Array.isArray(comps) ? comps : comps ? [comps] : [];
-    const supportsTodo = compList.some((c: any) => c?.["@_name"] === "VTODO");
-    if (supportsTodo) {
-      const href = firstHref(r);
-      if (href) return { shardOrigin: step3.shardOrigin, collectionHref: href };
+    const compNames = compList.map((c: any) => c?.["@_name"]).filter(Boolean);
+    const isSelf = normalize(url) === normalize(homeUrl);
+    const displayName = typeof prop.displayname === "string" ? prop.displayname : prop.displayname?.["#text"] || "";
+    seen.push(
+      `href=${url} name="${displayName}" comps=[${compNames.join(",")}] resourcetype=${JSON.stringify(prop.resourcetype)}${isSelf ? " SELF" : ""}`
+    );
+    // Depth:1 also returns the home-set container itself as one of the
+    // entries (a self-reference) - PUTing a VTODO directly into that
+    // umbrella folder is invalid, it has to go in an actual child list.
+    if (!chosen && !isSelf && compNames.includes("VTODO")) {
+      chosen = { shardOrigin: step3.shardOrigin, collectionUrl: url };
     }
   }
-  throw new Error("No VTODO-capable (Reminders) collection found in this iCloud account");
+  // Always logged (not just on failure) - the first successful write landed
+  // somewhere Apple accepted (2xx) but that never actually showed up in
+  // Reminders, so seeing every candidate is the only way to tell which one
+  // is genuinely the reminders list vs. a calendar that merely also
+  // advertises VTODO support.
+  console.log(`Apple CalDAV collections under ${homeUrl}:\n${seen.join("\n")}\nChosen: ${chosen?.collectionUrl || "none"}`);
+  if (!chosen) throw new Error(`No VTODO-capable child list found. Collections seen: ${seen.join(" | ") || "(none)"}`);
+  return chosen;
 }
 
 function icsEscape(text: string): string {
@@ -102,7 +142,7 @@ export async function createAppleReminder(
   appPassword: string,
   { text, dueAt }: { text: string; dueAt?: string }
 ): Promise<{ ok: true }> {
-  const { shardOrigin, collectionHref } = await discoverTodoCollection(email, appPassword);
+  const { collectionUrl } = await discoverTodoCollection(email, appPassword);
   const uid = crypto.randomUUID();
   const now = toIcsDateTime(new Date().toISOString());
 
@@ -119,7 +159,7 @@ export async function createAppleReminder(
   lines.push("STATUS:NEEDS-ACTION", "END:VTODO", "END:VCALENDAR");
   const ics = lines.join("\r\n");
 
-  const putUrl = `${shardOrigin}${collectionHref}${uid}.ics`;
+  const putUrl = `${collectionUrl.replace(/\/?$/, "/")}${uid}.ics`;
   const res = await fetch(putUrl, {
     method: "PUT",
     headers: {

@@ -19,6 +19,19 @@ export const TOOL_SCHEMAS = [
     },
   },
   {
+    name: "find_conflicts",
+    description:
+      "Scan a time window for calendar events that overlap each other (already on the calendar, not a new event you're about to create). Returns them grouped by clash, with each event's domain/priority if it has one. Overlap detection is done precisely in code - use this instead of eyeballing list_events results when asked to check the schedule for clashes.",
+    input_schema: {
+      type: "object",
+      properties: {
+        timeMin: { type: "string", description: "ISO datetime, inclusive start" },
+        timeMax: { type: "string", description: "ISO datetime, exclusive end" },
+      },
+      required: ["timeMin", "timeMax"],
+    },
+  },
+  {
     name: "create_event",
     description:
       "Create a calendar event. Always call list_events for the same window first if you haven't already this turn, to check for conflicts.",
@@ -160,7 +173,54 @@ function todayKey() {
   return new Date().toISOString().slice(0, 10);
 }
 
-const CALENDAR_TOOLS = new Set(["list_events", "create_event", "update_event", "delete_event"]);
+const DOMAIN_RE = /Domain:\s*(.+)/i;
+const PRIORITY_RE = /Priority:\s*(\d+)/i;
+
+function simplifyEvent(e) {
+  const description = e.description || "";
+  const domainMatch = description.match(DOMAIN_RE);
+  const priorityMatch = description.match(PRIORITY_RE);
+  return {
+    id: e.id,
+    calendarId: e.calendarId,
+    calendarName: e.calendarName,
+    title: e.summary,
+    start: e.start?.dateTime || e.start?.date,
+    end: e.end?.dateTime || e.end?.date,
+    description,
+    domain: domainMatch ? domainMatch[1].trim() : null,
+    priority: priorityMatch ? Number(priorityMatch[1]) : null,
+  };
+}
+
+function timeOverlaps(a, b) {
+  return new Date(a.start) < new Date(b.end) && new Date(b.start) < new Date(a.end);
+}
+
+// Transitively clusters events that overlap each other into groups; only
+// groups with more than one event (an actual clash) are returned.
+function groupOverlapping(events) {
+  const groups = [];
+  const used = new Set();
+  for (let i = 0; i < events.length; i++) {
+    if (used.has(i)) continue;
+    const group = [events[i]];
+    for (let j = i + 1; j < events.length; j++) {
+      if (used.has(j)) continue;
+      if (group.some((e) => timeOverlaps(e, events[j]))) {
+        group.push(events[j]);
+        used.add(j);
+      }
+    }
+    if (group.length > 1) {
+      groups.push(group);
+      used.add(i);
+    }
+  }
+  return groups;
+}
+
+const CALENDAR_TOOLS = new Set(["list_events", "find_conflicts", "create_event", "update_event", "delete_event"]);
 
 // ctx = { uid }
 export async function executeTool(name, input, ctx) {
@@ -174,15 +234,17 @@ export async function executeTool(name, input, ctx) {
   switch (name) {
     case "list_events": {
       const events = await cal.listEvents(input.timeMin, input.timeMax);
-      return events.map((e) => ({
-        id: e.id,
-        calendarId: e.calendarId,
-        calendarName: e.calendarName,
-        title: e.summary,
-        start: e.start?.dateTime || e.start?.date,
-        end: e.end?.dateTime || e.end?.date,
-        description: e.description || "",
-      }));
+      return events.map(simplifyEvent);
+    }
+    case "find_conflicts": {
+      const events = await cal.listEvents(input.timeMin, input.timeMax);
+      const simplified = events.filter((e) => e.status !== "cancelled").map(simplifyEvent);
+      const groups = groupOverlapping(simplified);
+      if (groups.length === 0) return { conflicts: [], note: "No overlapping events in this window." };
+      return {
+        conflicts: groups,
+        note: "Each group is a set of events that overlap each other. Reason about which should yield using: explicit priority tags if present, proximity to deadlines/tests/exams (check nearby events or ask the user), and domain importance - then propose a specific resolution (shift to a free slot, or cancel) and get explicit confirmation before calling update_event or delete_event.",
+      };
     }
     case "create_event": {
       const existing = await cal.listEvents(input.start, input.end);
@@ -190,14 +252,8 @@ export async function executeTool(name, input, ctx) {
       if (conflicts.length > 0) {
         return {
           conflict: true,
-          conflictingEvents: conflicts.map((e) => ({
-            id: e.id,
-            calendarId: e.calendarId,
-            title: e.summary,
-            start: e.start?.dateTime || e.start?.date,
-            end: e.end?.dateTime || e.end?.date,
-          })),
-          note: "Overlapping event(s) found. Discuss priority with the user before creating, updating, or deleting anything.",
+          conflictingEvents: conflicts.map(simplifyEvent),
+          note: "Overlapping event(s) found. Weigh priority/domain/proximity to deadlines and discuss with the user before creating, updating, or deleting anything - see the system prompt's conflict-resolution guidance.",
         };
       }
       const created = await cal.createEvent(input);

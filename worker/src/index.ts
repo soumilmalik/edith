@@ -263,6 +263,7 @@ async function handleAppleReminder(request: Request, env: Env): Promise<Response
     await createAppleReminder(env.APPLE_ID_EMAIL, env.APPLE_APP_PASSWORD, { text: body.text, dueAt: body.dueAt });
     return json({ ok: true }, env);
   } catch (err: any) {
+    console.error("Apple Reminders push failed:", err?.message || err);
     return json({ error: String(err?.message || err) }, env, 502);
   }
 }
