@@ -1,6 +1,6 @@
 import React from "react";
 
-export default function VoiceControls({ listening, speaking, onToggleMic, voiceRepliesOn, onToggleVoiceReplies, supported }) {
+export default function VoiceControls({ listening, speaking, onToggleMic, supported }) {
   return (
     <div className="row">
       <button
@@ -11,10 +11,7 @@ export default function VoiceControls({ listening, speaking, onToggleMic, voiceR
       >
         {listening ? "●" : "🎙"}
       </button>
-      <label className="small row">
-        <input type="checkbox" checked={voiceRepliesOn} onChange={onToggleVoiceReplies} style={{ width: "auto" }} />
-        Voice replies
-      </label>
+      <span className="small">{listening ? "Listening..." : "Tap to talk - typed messages stay text-only"}</span>
       {speaking && <span className="badge">speaking</span>}
     </div>
   );

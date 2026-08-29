@@ -29,7 +29,6 @@ export default function ChatPanel({ ampRef }) {
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [voiceRepliesOn, setVoiceRepliesOn] = useState(true);
 
   const historyRef = useRef([]);
   const recognizerRef = useRef(null);
@@ -45,7 +44,10 @@ export default function ChatPanel({ ampRef }) {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [displayLog]);
 
-  async function handleSend(text) {
+  // viaVoice: only replies to messages spoken through the mic get spoken
+  // back - typed messages always get a text-only reply (saves TTS credits
+  // and just makes sense: you typed because you wanted to read, not listen).
+  async function handleSend(text, { viaVoice = false } = {}) {
     const trimmed = text.trim();
     if (!trimmed || !user) return;
     setSending(true);
@@ -63,7 +65,7 @@ export default function ChatPanel({ ampRef }) {
       historyRef.current = messages;
       const finalText = replyText || "(no reply)";
       setDisplayLog((log) => [...log, { role: "assistant", text: finalText }]);
-      if (voiceRepliesOn) speakReply(finalText);
+      if (viaVoice) speakReply(finalText);
     } catch (err) {
       setDisplayLog((log) => [...log, { role: "assistant", text: `Error: ${err.message}` }]);
     } finally {
@@ -126,7 +128,7 @@ export default function ChatPanel({ ampRef }) {
         if (ampRef) ampRef.current = 0;
       },
       onResult: ({ finalText }) => {
-        if (finalText) handleSend(finalText);
+        if (finalText) handleSend(finalText, { viaVoice: true });
       },
     });
     recognizerRef.current = recognizer;
@@ -155,8 +157,6 @@ export default function ChatPanel({ ampRef }) {
         listening={listening}
         speaking={speaking}
         onToggleMic={toggleMic}
-        voiceRepliesOn={voiceRepliesOn}
-        onToggleVoiceReplies={() => setVoiceRepliesOn((v) => !v)}
         supported={isSpeechRecognitionSupported()}
       />
       <form
