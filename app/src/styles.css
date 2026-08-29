@@ -202,6 +202,23 @@ input[type="file"] {
   background: rgba(255, 255, 255, 0.05);
 }
 
+.chat-msg.live-transcript {
+  font-style: italic;
+  color: var(--text-dim);
+  border: 1px dashed var(--panel-border);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%,
+  100% {
+    opacity: 0.75;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
 .chat-input-row {
   display: flex;
   gap: 8px;

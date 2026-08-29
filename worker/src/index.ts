@@ -235,6 +235,19 @@ async function handleTts(request: Request, env: Env): Promise<Response> {
   });
 }
 
+// Mints a short-lived (15min), single-use token scoped to realtime speech-to-
+// text - the browser connects to ElevenLabs' STT WebSocket directly with
+// this instead of the permanent API key (which never reaches the client).
+async function handleSttToken(request: Request, env: Env): Promise<Response> {
+  const res = await fetch("https://api.elevenlabs.io/v1/single-use-token/realtime_scribe", {
+    method: "POST",
+    headers: { "xi-api-key": env.ELEVENLABS_API_KEY },
+  });
+  const data = (await res.json()) as any;
+  if (!res.ok) return json(data, env, res.status);
+  return json(data, env);
+}
+
 export default {
   async fetch(request: Request, rawEnv: Env): Promise<Response> {
     // Resolve the multi-origin allowlist down to the single origin this
@@ -264,6 +277,9 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/api/tts") {
       return handleTts(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/api/stt/token") {
+      return handleSttToken(request, env);
     }
     return json({ error: "Not found" }, env, 404);
   },

@@ -1,35 +1,17 @@
 import React from "react";
 
-export default function VoiceControls({
-  listening,
-  speaking,
-  onToggleMic,
-  supported,
-  wakeEnabled,
-  wakeActive,
-  onToggleWake,
-}) {
+export default function VoiceControls({ listening, speaking, onToggleMic, supported }) {
   return (
-    <div className="row wrap">
+    <div className="row">
       <button
         className={`mic-btn ${listening ? "listening" : ""}`}
         onClick={onToggleMic}
         disabled={!supported}
-        title={supported ? "Talk to Edith" : "Speech recognition not supported in this browser"}
+        title={supported ? "Talk to Edith" : "Voice input not supported in this browser"}
       >
         {listening ? "●" : "🎙"}
       </button>
-      <label className="small row" style={{ cursor: supported ? "pointer" : "not-allowed" }}>
-        <input
-          type="checkbox"
-          checked={wakeEnabled}
-          onChange={onToggleWake}
-          disabled={!supported}
-          style={{ width: "auto" }}
-        />
-        "Hey Edith"
-        {wakeEnabled && <span className="badge">{wakeActive ? "listening" : "reconnecting..."}</span>}
-      </label>
+      <span className="small">{listening ? "Listening..." : "Tap to talk"}</span>
       {speaking && <span className="badge">speaking</span>}
     </div>
   );

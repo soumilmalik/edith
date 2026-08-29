@@ -1,40 +1,6 @@
-// Browser-native voice in/out. No backend calls, no API key.
-
-const SpeechRecognitionImpl =
-  window.SpeechRecognition || window.webkitSpeechRecognition || null;
-
-export function isSpeechRecognitionSupported() {
-  return !!SpeechRecognitionImpl;
-}
-
-export function createRecognizer({ onResult, onEnd, onStart, onError, continuous = false }) {
-  if (!SpeechRecognitionImpl) return null;
-  const recognizer = new SpeechRecognitionImpl();
-  recognizer.continuous = continuous;
-  recognizer.interimResults = true;
-  recognizer.lang = "en-US";
-
-  recognizer.onstart = () => onStart?.();
-  recognizer.onend = () => onEnd?.();
-  recognizer.onerror = (e) => onError?.(e);
-  recognizer.onresult = (event) => {
-    let finalText = "";
-    let interimText = "";
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      const transcript = event.results[i][0].transcript;
-      if (event.results[i].isFinal) finalText += transcript;
-      else interimText += transcript;
-    }
-    onResult?.({ finalText, interimText });
-  };
-  return recognizer;
-}
-
-const WAKE_PHRASE_RE = /\b(hey|hi|ok|okay)\s+edith\b/i;
-
-export function containsWakePhrase(text) {
-  return WAKE_PHRASE_RE.test(text || "");
-}
+// Voice out (TTS). Voice in now lives in scribeStream.js (ElevenLabs
+// realtime STT) - the browser's native SpeechRecognition proved unreliable
+// (e.g. blocked/crippled by Brave's shields) and had no punctuation.
 
 let cachedVoice = null;
 function pickFemaleVoice() {
@@ -137,28 +103,4 @@ export async function speakNeural(text, { workerUrl, idToken, ampRef, onStart, o
   } catch (err) {
     onError?.(err);
   }
-}
-
-// Live mic amplitude (0-1) for driving the orb while listening.
-export async function createMicAnalyser() {
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-  const source = audioCtx.createMediaStreamSource(stream);
-  const analyser = audioCtx.createAnalyser();
-  analyser.fftSize = 256;
-  source.connect(analyser);
-  const data = new Uint8Array(analyser.frequencyBinCount);
-
-  function getAmplitude() {
-    analyser.getByteFrequencyData(data);
-    const avg = data.reduce((a, b) => a + b, 0) / data.length;
-    return Math.min(1, avg / 128);
-  }
-
-  function stop() {
-    stream.getTracks().forEach((t) => t.stop());
-    audioCtx.close();
-  }
-
-  return { getAmplitude, stop };
 }

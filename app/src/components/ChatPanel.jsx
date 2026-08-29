@@ -1,19 +1,13 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/appState.js";
 import { sendMessage, buildSystemPrompt } from "../lib/claudeClient.js";
-import {
-  createRecognizer,
-  isSpeechRecognitionSupported,
-  speakNeural,
-  speakBrowser,
-  primeVoices,
-  createMicAnalyser,
-  containsWakePhrase,
-} from "../lib/speech.js";
+import { speakNeural, speakBrowser, primeVoices } from "../lib/speech.js";
+import { startScribeStream } from "../lib/scribeStream.js";
 import { auth } from "../lib/firebase.js";
 import VoiceControls from "./VoiceControls.jsx";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
+const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
 
 export default function ChatPanel({ ampRef }) {
   const { user, profile, domains, setProfileLocal } = useAppState();
@@ -30,54 +24,25 @@ export default function ChatPanel({ ampRef }) {
   const [sending, setSending] = useState(false);
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
-  const [wakeEnabled, setWakeEnabled] = useState(false);
-  const [wakeActive, setWakeActive] = useState(false); // background recognizer actually running
+  const [liveTranscript, setLiveTranscript] = useState("");
+  const [micError, setMicError] = useState("");
 
   const historyRef = useRef([]);
-  const recognizerRef = useRef(null);
-  const wakeRecognizerRef = useRef(null);
-  const wakeRestartTimeoutRef = useRef(null);
-  const analyserRef = useRef(null);
+  const scribeRef = useRef(null);
+  const committedRef = useRef(""); // stable, punctuated text confirmed so far
+  const partialRef = useRef(""); // live, still-changing tail
   const logEndRef = useRef(null);
   const speakPulseId = useRef(null);
-
-  // Only one SpeechRecognition session may be alive at a time page-wide;
-  // starting a new one before the old one's onend has actually fired throws
-  // (silently, since callers didn't await it) and leaves everything stuck.
-  // These refs are the single source of truth for transitions - React state
-  // below mirrors them purely for rendering, never for control-flow
-  // decisions inside recognizer callbacks (which would otherwise close over
-  // stale values).
-  const modeRef = useRef("idle"); // "idle" | "wake" | "command"
-  const wakeEnabledRef = useRef(false);
-  const wantCommandAfterStopRef = useRef(false);
 
   useEffect(() => {
     primeVoices();
   }, []);
 
-  useEffect(() => {
-    wakeEnabledRef.current = wakeEnabled;
-    if (wakeEnabled) {
-      if (modeRef.current === "idle") startWakeListening();
-    } else if (modeRef.current === "wake") {
-      wakeRecognizerRef.current?.stop();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [wakeEnabled]);
-
-  useEffect(
-    () => () => {
-      clearTimeout(wakeRestartTimeoutRef.current);
-      wakeRecognizerRef.current?.stop();
-      recognizerRef.current?.stop();
-    },
-    []
-  );
+  useEffect(() => () => scribeRef.current?.stop(), []);
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [displayLog]);
+  }, [displayLog, liveTranscript]);
 
   // viaVoice: only replies to messages spoken through the mic get spoken
   // back - typed messages always get a text-only reply (saves TTS credits
@@ -139,121 +104,46 @@ export default function ChatPanel({ ampRef }) {
     });
   }
 
-  // Captures one spoken command. Used both by the manual mic button and by
-  // wake-word detection - either way, this is what actually sends to Edith.
-  // Only call this when modeRef is "idle": if wake is currently running, go
-  // through requestCommandListening() instead so we wait for its real stop.
-  function startCommandListeningNow() {
-    if (!isSpeechRecognitionSupported() || modeRef.current !== "idle") return;
-
-    const recognizer = createRecognizer({
-      onStart: async () => {
-        modeRef.current = "command";
-        setListening(true);
-        try {
-          analyserRef.current = await createMicAnalyser();
-          pumpMicAmplitude();
-        } catch {
-          // mic permission denied; recognition can still work without the visual amplitude
-        }
-      },
-      onEnd: () => {
-        modeRef.current = "idle";
-        setListening(false);
-        analyserRef.current?.stop();
-        analyserRef.current = null;
-        if (ampRef) ampRef.current = 0;
-        recognizerRef.current = null;
-        if (wakeEnabledRef.current) startWakeListening();
-      },
-      onResult: ({ finalText }) => {
-        if (finalText) handleSend(finalText, { viaVoice: true });
-      },
-    });
-    if (!recognizer) return;
-    recognizerRef.current = recognizer;
-    try {
-      recognizer.start();
-    } catch {
-      recognizerRef.current = null;
-      modeRef.current = "idle";
-    }
-  }
-
-  // Entry point for both the manual mic button and wake-word detection.
-  // Safe to call from any mode - if wake is active, stops it first and lets
-  // its onEnd hand off to the command recognizer once it's actually gone.
-  function requestCommandListening() {
-    if (modeRef.current === "command") return;
-    if (modeRef.current === "wake") {
-      wantCommandAfterStopRef.current = true;
-      wakeRecognizerRef.current?.stop();
+  async function toggleMic() {
+    if (listening) {
+      scribeRef.current?.stop();
       return;
     }
-    startCommandListeningNow();
-  }
 
-  function toggleMic() {
-    if (modeRef.current === "command") {
-      recognizerRef.current?.stop();
-      return;
-    }
-    requestCommandListening();
-  }
+    setMicError("");
+    committedRef.current = "";
+    partialRef.current = "";
+    setLiveTranscript("");
 
-  function pumpMicAmplitude() {
-    if (!analyserRef.current) return;
-    const amp = analyserRef.current.getAmplitude();
-    if (ampRef) ampRef.current = amp;
-    if (analyserRef.current) requestAnimationFrame(pumpMicAmplitude);
-  }
-
-  // Background always-on listener for "hey Edith" / "ok Edith" etc. Runs
-  // continuously and restarts itself (browsers stop continuous recognition
-  // after periods of silence), except after a fatal permission error or if
-  // the user turned the toggle off.
-  function startWakeListening() {
-    if (!isSpeechRecognitionSupported() || modeRef.current !== "idle" || !wakeEnabledRef.current) return;
-    clearTimeout(wakeRestartTimeoutRef.current);
-
-    const recognizer = createRecognizer({
-      continuous: true,
-      onStart: () => {
-        modeRef.current = "wake";
-        setWakeActive(true);
-      },
-      onResult: ({ finalText, interimText }) => {
-        if (containsWakePhrase(finalText) || containsWakePhrase(interimText)) {
-          wantCommandAfterStopRef.current = true;
-          wakeRecognizerRef.current?.stop();
-        }
-      },
-      onError: (e) => {
-        if (e.error === "not-allowed" || e.error === "service-not-allowed") {
-          wakeEnabledRef.current = false;
-          setWakeEnabled(false);
-        }
-      },
-      onEnd: () => {
-        modeRef.current = "idle";
-        setWakeActive(false);
-        wakeRecognizerRef.current = null;
-        const wantsCommand = wantCommandAfterStopRef.current;
-        wantCommandAfterStopRef.current = false;
-        if (wantsCommand) {
-          startCommandListeningNow();
-        } else if (wakeEnabledRef.current) {
-          wakeRestartTimeoutRef.current = setTimeout(startWakeListening, 300);
-        }
-      },
-    });
-    if (!recognizer) return;
-    wakeRecognizerRef.current = recognizer;
     try {
-      recognizer.start();
-    } catch {
-      wakeRecognizerRef.current = null;
-      modeRef.current = "idle";
+      const idToken = await auth.currentUser?.getIdToken();
+      const controller = await startScribeStream({
+        workerUrl: WORKER_URL,
+        idToken,
+        ampRef,
+        onOpen: () => setListening(true),
+        onPartial: (text) => {
+          partialRef.current = text;
+          setLiveTranscript(`${committedRef.current} ${partialRef.current}`.trim());
+        },
+        onCommitted: (text) => {
+          committedRef.current = `${committedRef.current} ${text}`.trim();
+          partialRef.current = "";
+          setLiveTranscript(committedRef.current);
+        },
+        onError: () => setMicError("Voice input hit an error - check your connection and try again."),
+        onClose: () => {
+          setListening(false);
+          scribeRef.current = null;
+          const finalText = committedRef.current.trim();
+          setLiveTranscript("");
+          if (finalText) handleSend(finalText, { viaVoice: true });
+        },
+      });
+      scribeRef.current = controller;
+    } catch (err) {
+      setMicError(err.message || "Couldn't start voice input.");
+      setListening(false);
     }
   }
 
@@ -266,17 +156,17 @@ export default function ChatPanel({ ampRef }) {
             {m.text}
           </div>
         ))}
+        {listening && (
+          <div className="chat-msg user live-transcript">{liveTranscript || "Listening..."}</div>
+        )}
         <div ref={logEndRef} />
       </div>
-      <VoiceControls
-        listening={listening}
-        speaking={speaking}
-        onToggleMic={toggleMic}
-        supported={isSpeechRecognitionSupported()}
-        wakeEnabled={wakeEnabled}
-        wakeActive={wakeActive}
-        onToggleWake={() => setWakeEnabled((v) => !v)}
-      />
+      {micError && (
+        <div className="small" style={{ color: "var(--danger)" }}>
+          {micError}
+        </div>
+      )}
+      <VoiceControls listening={listening} speaking={speaking} onToggleMic={toggleMic} supported={MIC_SUPPORTED} />
       <form
         className="chat-input-row"
         onSubmit={(e) => {
