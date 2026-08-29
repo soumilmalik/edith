@@ -41,7 +41,7 @@ const emptyForm = { id: null, title: "", start: "", end: "", domain: "", priorit
 
 export default function CalendarView() {
   const { domains, calendarVersion } = useAppState();
-  const [rangeMode, setRangeMode] = useState("week");
+  const [rangeMode, setRangeMode] = useState("today");
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");

@@ -2,6 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/appState.js";
 import { sendMessage, buildSystemPrompt } from "../lib/claudeClient.js";
 import { speakNeural, speakBrowser, primeVoices, unlockAudio } from "../lib/speech.js";
+import { showDebugError } from "../lib/debugBanner.js";
 import { startScribeStream } from "../lib/scribeStream.js";
 import { auth } from "../lib/firebase.js";
 import VoiceControls from "./VoiceControls.jsx";
@@ -104,7 +105,13 @@ export default function ChatPanel({ ampRef }) {
         setSpeaking(false);
         if (ampRef) ampRef.current = 0;
       },
-      onError: () => speakReplyFallback(text), // e.g. TTS not configured yet
+      onError: (err) => {
+        // Falls back to the free browser voice, but surface the real reason
+        // instead of silently swallowing it - "it used the wrong voice"
+        // bugs are otherwise impossible to diagnose without live devtools.
+        showDebugError(`Neural voice failed, used browser fallback: ${err?.message || err}`);
+        speakReplyFallback(text);
+      },
     });
   }
 
