@@ -51,16 +51,23 @@ function Gate() {
   const { user, authorized, loadingData } = useAppState();
   // "loading" (red) -> "online" (blue, brief "EDITH ONLINE") -> "done" (dashboard)
   const [bootPhase, setBootPhase] = useState("loading");
+  const transitionedRef = useRef(false);
 
   const isReady = user && authorized && !loadingData;
 
+  // Deliberately depends only on isReady, not bootPhase: setting bootPhase
+  // inside this effect while also listing it as a dependency caused the
+  // effect to immediately re-run and its cleanup to cancel the very timer it
+  // had just started, before the 900ms ever elapsed - stuck on "online"
+  // forever. transitionedRef (not state) guards against re-entering.
   useEffect(() => {
-    if (isReady && bootPhase === "loading") {
+    if (isReady && !transitionedRef.current) {
+      transitionedRef.current = true;
       setBootPhase("online");
       const t = setTimeout(() => setBootPhase("done"), 900);
       return () => clearTimeout(t);
     }
-  }, [isReady, bootPhase]);
+  }, [isReady]);
 
   if (user === undefined) {
     return <div className="login-screen glow-text theme-red">EDITH BOOTING...</div>;
