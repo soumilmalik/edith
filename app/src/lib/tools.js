@@ -187,6 +187,12 @@ export const TOOL_SCHEMAS = [
       required: ["title", "domain"],
     },
   },
+  {
+    name: "play_alexa_music",
+    description:
+      "Triggers the user's personal shortcut that plays 'Mulemantra' on loop on their Alexa via Spotify. Call this whenever the user asks to play Mulemantra / that song on Alexa - phrasing and voice transcription of the name can vary (e.g. 'play mole manter', 'put on mulemantra'). No input needed.",
+    input_schema: { type: "object", properties: {} },
+  },
 ];
 
 const DOMAIN_RE = /Domain:\s*(.+)/i;
@@ -352,6 +358,21 @@ export async function executeTool(name, input, ctx) {
         done: false,
       });
       return { id, ...input };
+    }
+    case "play_alexa_music": {
+      const url = import.meta.env.VITE_ALEXA_SHORTCUT_URL;
+      if (!url) return { error: "Alexa shortcut URL isn't configured (VITE_ALEXA_SHORTCUT_URL)." };
+      // A real new-tab open (not a background fetch/hidden iframe) is what
+      // reliably lets iOS hand off to a URL-scheme-based Shortcuts trigger;
+      // the tab itself shows nothing to the user either way.
+      const win = window.open(url, "_blank", "noopener");
+      if (!win) return { error: "Browser blocked opening the shortcut link." };
+      setTimeout(() => {
+        try {
+          win.close();
+        } catch {}
+      }, 4000);
+      return { triggered: true };
     }
     default:
       return { error: `Unknown tool: ${name}` };

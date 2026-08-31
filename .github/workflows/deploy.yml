@@ -44,6 +44,7 @@ jobs:
           VITE_GOOGLE_CLIENT_ID: ${{ secrets.VITE_GOOGLE_CLIENT_ID }}
           VITE_ALLOWED_EMAIL: ${{ secrets.VITE_ALLOWED_EMAIL }}
           VITE_WORKER_URL: ${{ secrets.VITE_WORKER_URL }}
+          VITE_ALEXA_SHORTCUT_URL: ${{ secrets.VITE_ALEXA_SHORTCUT_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
