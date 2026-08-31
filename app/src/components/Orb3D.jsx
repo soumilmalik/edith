@@ -4,7 +4,10 @@ import * as THREE from "three";
 // ampRef: a mutable ref ({ current: 0..1 }) the parent updates every frame
 // (from mic amplitude while listening, or a synthetic pulse while speaking)
 // without triggering React re-renders.
-export default function Orb3D({ ampRef }) {
+// typeRef: a mutable ref ({ current: <count> }) incremented once per
+// keystroke in the chat input - each new count gives the orb a tiny random
+// spring "nudge" so it visibly reacts as you type, without a re-render.
+export default function Orb3D({ ampRef, typeRef }) {
   const mountRef = useRef(null);
 
   useEffect(() => {
@@ -81,6 +84,14 @@ export default function Orb3D({ ampRef }) {
     let smoothedAmp = 0;
     const clock = new THREE.Clock();
 
+    // Per-keystroke nudge: a tiny damped spring, kicked with a small random
+    // velocity on each new keystroke, that settles back to rest on its own.
+    let lastTypeCount = typeRef?.current || 0;
+    let jitterX = 0;
+    let jitterY = 0;
+    let jitterVX = 0;
+    let jitterVY = 0;
+
     function animate() {
       frameId = requestAnimationFrame(animate);
       const dt = Math.min(clock.getDelta(), 0.05); // clamp so a stalled tab doesn't jump
@@ -98,9 +109,23 @@ export default function Orb3D({ ampRef }) {
       // rather than a lingering glow.
       clickEnergy *= Math.exp(-dt * 3.2);
 
+      // Very small critically-damped spring, kicked once per keystroke -
+      // settles back to center in well under half a second.
+      if (typeRef && typeRef.current !== lastTypeCount) {
+        lastTypeCount = typeRef.current;
+        jitterVX += (Math.random() - 0.5) * 0.5;
+        jitterVY += (Math.random() - 0.5) * 0.5;
+      }
+      const springK = 90;
+      const springDamping = 11;
+      jitterVX += (-springK * jitterX - springDamping * jitterVX) * dt;
+      jitterVY += (-springK * jitterY - springDamping * jitterVY) * dt;
+      jitterX += jitterVX * dt;
+      jitterY += jitterVY * dt;
+
       // Slow float, like the orb has real inertia in zero gravity.
-      group.position.y = Math.sin(t * 0.5) * 0.12;
-      group.position.x = Math.sin(t * 0.33) * 0.04;
+      group.position.y = Math.sin(t * 0.5) * 0.12 + jitterY;
+      group.position.x = Math.sin(t * 0.33) * 0.04 + jitterX;
 
       // Idle rotation, with a snappier-but-still-smooth cursor tilt layered
       // on top - noticeably "looks toward" the pointer rather than barely
@@ -185,7 +210,7 @@ export default function Orb3D({ ampRef }) {
       particleMat.dispose();
       mount.removeChild(renderer.domElement);
     };
-  }, [ampRef]);
+  }, [ampRef, typeRef]);
 
   return <div className="orb-canvas" ref={mountRef} />;
 }

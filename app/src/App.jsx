@@ -16,10 +16,14 @@ import { useIsMobile } from "./lib/useIsMobile.js";
 
 function DesktopDashboard() {
   const ampRef = useRef(0);
+  // Bumped once per keystroke in the chat input - Orb3D reads the counter
+  // to give the orb a very small physical nudge per keypress, so typing to
+  // Edith feels like it's reacting to you in real time.
+  const typeRef = useRef(0);
 
   return (
     <div className="app-shell">
-      <Orb3D ampRef={ampRef} />
+      <Orb3D ampRef={ampRef} typeRef={typeRef} />
       <div className="hud-layer">
         <div className="left-col">
           <CalendarView />
@@ -36,7 +40,7 @@ function DesktopDashboard() {
           <button onClick={signOutUser}>Sign out</button>
         </div>
 
-        <ChatPanel ampRef={ampRef} />
+        <ChatPanel ampRef={ampRef} typeRef={typeRef} />
       </div>
     </div>
   );

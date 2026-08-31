@@ -13,7 +13,7 @@ import { IconAttach } from "./SmallIcons.jsx";
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
 
-export default function ChatPanel({ ampRef }) {
+export default function ChatPanel({ ampRef, typeRef }) {
   const { user, profile, domains, setProfileLocal, bumpCalendarRefresh, bumpHealthRefresh, startTimer } = useAppState();
   const isNewProfile = !profile.bio && !profile.decadeGoals && !profile.yearGoals;
   const [displayLog, setDisplayLog] = useState([
@@ -318,6 +318,9 @@ export default function ChatPanel({ ampRef }) {
         <input
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onKeyDown={() => {
+            if (typeRef) typeRef.current += 1;
+          }}
           onPaste={handlePaste}
           placeholder="Talk to Edith... (paste an image too)"
           disabled={sending}
