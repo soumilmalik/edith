@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
 import { useAppState } from "../state/appState.js";
 import { sendMessage, buildSystemPrompt } from "../lib/claudeClient.js";
 import { speakNeural, speakBrowser, primeVoices, unlockAudio } from "../lib/speech.js";
@@ -251,7 +252,13 @@ export default function ChatPanel({ ampRef }) {
           <div key={i} className={`chat-msg ${m.role}`}>
             {m.imagePreviewUrl && <img src={m.imagePreviewUrl} alt="attachment" className="chat-attachment-img" />}
             {m.attachmentName && <div className="badge">{m.attachmentName}</div>}
-            {m.text}
+            {m.role === "assistant" ? (
+              <div className="chat-markdown">
+                <ReactMarkdown>{m.text}</ReactMarkdown>
+              </div>
+            ) : (
+              m.text
+            )}
           </div>
         ))}
         {listening && (
