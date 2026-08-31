@@ -17,6 +17,7 @@ import {
   deleteDoc,
   query,
   orderBy,
+  limit,
   getDocs,
   serverTimestamp,
 } from "firebase/firestore";
@@ -95,6 +96,15 @@ export async function getHealthLog(uid, dateKey) {
 
 export async function saveHealthLog(uid, dateKey, data) {
   await setDoc(doc(db, "users", uid, "healthLogs", dateKey), data, { merge: true });
+}
+
+// Past days' logs, most recent first - doc ids are YYYY-MM-DD so they sort
+// correctly as plain strings. Same Firestore security rules as everything
+// else under users/{uid}: only this account can read it, nothing public.
+export async function listHealthLogs(uid, days = 60) {
+  const q = query(collection(db, "users", uid, "healthLogs"), orderBy("__name__", "desc"), limit(days));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ date: d.id, ...d.data() }));
 }
 
 export async function listTasks(uid) {

@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { useAppState } from "../state/appState.js";
-import { getHealthLog, saveHealthLog } from "../lib/firebase.js";
+import { getHealthLog, saveHealthLog, listHealthLogs } from "../lib/firebase.js";
 import { estimateNutrition } from "../lib/nutrition.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
 import { todayKey } from "../lib/dateKey.js";
@@ -18,6 +18,10 @@ export default function HealthPanel() {
   const [estimate, setEstimate] = useState(null); // { description, calories, proteinG, confidence }
   const [foodError, setFoodError] = useState("");
   const foodFileRef = useRef(null);
+
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState(null); // null = not loaded yet
+  const [historyLoading, setHistoryLoading] = useState(false);
 
   const dateKey = todayKey();
 
@@ -123,6 +127,21 @@ export default function HealthPanel() {
     setFoodText("");
     clearFoodImage();
     setFoodError("");
+  }
+
+  async function toggleHistory() {
+    if (showHistory) {
+      setShowHistory(false);
+      return;
+    }
+    setShowHistory(true);
+    setHistoryLoading(true);
+    try {
+      const logs = await listHealthLogs(user.uid);
+      setHistory(logs.filter((l) => l.date !== dateKey));
+    } finally {
+      setHistoryLoading(false);
+    }
   }
 
   return (
@@ -234,6 +253,31 @@ export default function HealthPanel() {
         <span className="small">min</span>
         <button type="submit">Log</button>
       </form>
+
+      <div className="row" style={{ marginTop: 14, marginBottom: showHistory ? 6 : 0 }}>
+        <button type="button" onClick={toggleHistory}>
+          {showHistory ? "Hide history" : "📜 View history"}
+        </button>
+      </div>
+
+      {showHistory && (
+        <div style={{ maxHeight: 220, overflowY: "auto" }}>
+          {historyLoading && <div className="small">Loading...</div>}
+          {!historyLoading && history?.length === 0 && (
+            <div className="small">No earlier days logged yet - only today's your own account can ever see, stored privately in your own Firestore data.</div>
+          )}
+          {!historyLoading &&
+            history?.map((h) => (
+              <div className="list-item" key={h.date} style={{ flexDirection: "column", alignItems: "flex-start" }}>
+                <span className="badge">{h.date}</span>
+                <span className="small">
+                  {h.water || 0} ml water &middot; {h.calories || 0} kcal &middot; {h.proteinG || 0} g protein
+                  {h.gymSessions?.length ? ` · ${h.gymSessions.map((g) => `${g.type} (${g.durationMin}m)`).join(", ")}` : ""}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
     </div>
   );
 }
