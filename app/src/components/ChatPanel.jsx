@@ -289,7 +289,6 @@ export default function ChatPanel({ ampRef }) {
           </button>
         </div>
       )}
-      <VoiceControls listening={listening} speaking={speaking} onToggleMic={toggleMic} supported={MIC_SUPPORTED} />
       <form
         className="chat-input-row"
         onSubmit={(e) => {
@@ -306,8 +305,10 @@ export default function ChatPanel({ ampRef }) {
           onChange={handleAttachFile}
           hidden
         />
+        <VoiceControls listening={listening} speaking={speaking} onToggleMic={toggleMic} supported={MIC_SUPPORTED} />
         <button
           type="button"
+          className="round-btn"
           title="Attach an image or PDF (like a syllabus)"
           onClick={() => fileInputRef.current?.click()}
           disabled={sending}

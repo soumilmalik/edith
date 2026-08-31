@@ -42,7 +42,7 @@
 *::-webkit-scrollbar-thumb {
   background: linear-gradient(var(--edith-blue), var(--edith-blue-dim));
   border-radius: 6px;
-  box-shadow: 0 0 6px rgba(0, 225, 255, 0.7);
+  box-shadow: 0 0 6px rgba(var(--edith-glow-rgb), 0.7);
 }
 
 *::-webkit-scrollbar-thumb:hover {
@@ -104,16 +104,32 @@ body {
 
 .panel {
   background: var(--panel-bg);
-  border: 2.5px solid var(--panel-border);
-  border-radius: 10px;
-  backdrop-filter: blur(6px);
-  box-shadow: 0 0 4px rgba(var(--edith-glow-rgb), 0.9), 0 0 22px rgba(var(--edith-glow-rgb), 0.55),
-    0 0 44px rgba(var(--edith-glow-rgb), 0.22), 0 0 20px rgba(var(--edith-glow-rgb), 0.2) inset;
-  padding: 14px;
+  border: 1.5px solid var(--panel-border);
+  border-radius: 14px;
+  backdrop-filter: blur(10px);
+  /* One crisp hairline ring (no blur) + one soft outer bloom + a faint
+     inner wash - this is what reads as a clean, single glow instead of the
+     "banded"/cheap look of many overlapping blur radii stacked together. */
+  box-shadow: 0 0 0 1px rgba(var(--edith-glow-rgb), 0.18), 0 0 26px rgba(var(--edith-glow-rgb), 0.28),
+    inset 0 0 22px rgba(var(--edith-glow-rgb), 0.05);
+  padding: 16px;
+  animation: panel-breathe 7s ease-in-out infinite;
   /* Flex/grid children default to min-width:auto, which lets an
      unshrinkable child (e.g. the native file input below) force the whole
      column wider than the viewport instead of wrapping/clipping. */
   min-width: 0;
+}
+
+@keyframes panel-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 1px rgba(var(--edith-glow-rgb), 0.16), 0 0 22px rgba(var(--edith-glow-rgb), 0.24),
+      inset 0 0 20px rgba(var(--edith-glow-rgb), 0.04);
+  }
+  50% {
+    box-shadow: 0 0 0 1px rgba(var(--edith-glow-rgb), 0.22), 0 0 32px rgba(var(--edith-glow-rgb), 0.34),
+      inset 0 0 24px rgba(var(--edith-glow-rgb), 0.07);
+  }
 }
 
 /* Guards against the native file input's intrinsic (locale-dependent, can be
@@ -212,7 +228,7 @@ input[type="file"] {
 
 .chat-msg.user {
   align-self: flex-end;
-  background: rgba(0, 212, 255, 0.15);
+  background: rgba(var(--edith-glow-rgb), 0.15);
 }
 
 .chat-msg.assistant {
@@ -336,7 +352,8 @@ input[type="file"] {
 
 .chat-input-row {
   display: flex;
-  gap: 8px;
+  gap: 10px;
+  align-items: center;
 }
 
 input,
@@ -344,13 +361,14 @@ textarea,
 select,
 button {
   font-family: var(--font-body);
-  background: rgba(0, 0, 0, 0.5);
+  background: rgba(0, 0, 0, 0.45);
   color: var(--text);
-  border: 1.5px solid var(--panel-border);
-  border-radius: 6px;
-  padding: 8px 10px;
+  border: 1.2px solid var(--panel-border);
+  border-radius: 8px;
+  padding: 8px 12px;
   font-size: 0.95rem;
-  box-shadow: 0 0 6px rgba(0, 225, 255, 0.25);
+  box-shadow: 0 0 5px rgba(var(--edith-glow-rgb), 0.15);
+  transition: box-shadow 0.18s ease, background 0.18s ease, border-color 0.18s ease, transform 0.12s ease;
 }
 
 /* iOS Safari auto-zooms the page when a focused input's font is under 16px */
@@ -365,24 +383,30 @@ textarea:focus,
 select:focus {
   outline: none;
   border-color: var(--edith-blue);
-  box-shadow: 0 0 12px rgba(0, 225, 255, 0.6);
+  box-shadow: 0 0 10px rgba(var(--edith-glow-rgb), 0.5);
 }
 
 button {
   cursor: pointer;
   color: var(--edith-blue);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
-  transition: box-shadow 0.15s, background 0.15s;
+  letter-spacing: 0.06em;
+  font-size: 0.85rem;
 }
 
-button:hover {
-  background: rgba(0, 225, 255, 0.15);
-  box-shadow: 0 0 16px rgba(0, 225, 255, 0.85);
+button:hover:not(:disabled) {
+  background: rgba(var(--edith-glow-rgb), 0.12);
+  border-color: var(--edith-blue);
+  box-shadow: 0 0 14px rgba(var(--edith-glow-rgb), 0.55);
+  transform: translateY(-1px);
+}
+
+button:active:not(:disabled) {
+  transform: translateY(0);
 }
 
 button:disabled {
-  opacity: 0.4;
+  opacity: 0.35;
   cursor: not-allowed;
 }
 
@@ -395,52 +419,60 @@ input[type="file"] {
 input[type="file"]::file-selector-button {
   font-family: var(--font-body);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.06em;
   color: var(--edith-blue);
-  background: rgba(0, 0, 0, 0.5);
-  border: 1.5px solid var(--panel-border);
-  border-radius: 6px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1.2px solid var(--panel-border);
+  border-radius: 8px;
   padding: 6px 10px;
   margin-right: 10px;
   cursor: pointer;
-  box-shadow: 0 0 6px rgba(0, 225, 255, 0.25);
-  transition: box-shadow 0.15s, background 0.15s;
+  box-shadow: 0 0 5px rgba(var(--edith-glow-rgb), 0.15);
+  transition: box-shadow 0.18s ease, background 0.18s ease;
 }
 
 input[type="file"]::file-selector-button:hover {
-  background: rgba(0, 225, 255, 0.15);
-  box-shadow: 0 0 16px rgba(0, 225, 255, 0.85);
+  background: rgba(var(--edith-glow-rgb), 0.12);
+  box-shadow: 0 0 14px rgba(var(--edith-glow-rgb), 0.55);
 }
 
 .chat-input-row input {
   flex: 1;
 }
 
-.mic-btn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
+.round-btn {
+  width: 38px;
+  height: 38px;
+  min-width: 38px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.2rem;
   padding: 0;
+  flex-shrink: 0;
+}
+
+.round-btn .icon-glow {
+  margin-right: 0;
 }
 
 .mic-btn.listening {
-  background: rgba(0, 212, 255, 0.3);
-  box-shadow: 0 0 20px rgba(0, 212, 255, 0.9);
+  background: rgba(var(--edith-glow-rgb), 0.3);
+  box-shadow: 0 0 20px rgba(var(--edith-glow-rgb), 0.9);
   animation: pulse 1.2s infinite;
+}
+
+.mic-btn.speaking {
+  box-shadow: 0 0 14px rgba(var(--edith-glow-rgb), 0.65);
 }
 
 @keyframes pulse {
   0%,
   100% {
-    box-shadow: 0 0 10px rgba(0, 212, 255, 0.6);
+    box-shadow: 0 0 10px rgba(var(--edith-glow-rgb), 0.6);
   }
   50% {
-    box-shadow: 0 0 26px rgba(0, 212, 255, 1);
+    box-shadow: 0 0 26px rgba(var(--edith-glow-rgb), 1);
   }
 }
 
@@ -481,7 +513,7 @@ input[type="file"]::file-selector-button:hover {
   align-items: center;
   gap: 6px;
   padding: 6px 0;
-  border-bottom: 1px solid rgba(0, 212, 255, 0.12);
+  border-bottom: 1px solid rgba(var(--edith-glow-rgb), 0.12);
   font-size: 0.9rem;
 }
 
@@ -684,12 +716,13 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .tab-btn.active .tab-icon {
-  filter: drop-shadow(0 0 5px rgba(0, 225, 255, 0.85));
+  filter: drop-shadow(0 0 5px rgba(var(--edith-glow-rgb), 0.85));
 }
 
 .tab-btn:hover {
-  background: rgba(0, 225, 255, 0.08);
+  background: rgba(var(--edith-glow-rgb), 0.08);
   box-shadow: none;
+  transform: none;
 }
 
 .tab-icon {

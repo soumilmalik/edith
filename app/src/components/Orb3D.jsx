@@ -43,19 +43,31 @@ export default function Orb3D({ ampRef }) {
     }
     const particleGeo = new THREE.BufferGeometry();
     particleGeo.setAttribute("position", new THREE.BufferAttribute(positions, 3));
-    const particleMat = new THREE.PointsMaterial({ color: 0x00d4ff, size: 0.02, transparent: true, opacity: 0.6 });
+    const particleMat = new THREE.PointsMaterial({ color: 0x00d4ff, size: 0.022, transparent: true, opacity: 0.55 });
     const particles = new THREE.Points(particleGeo, particleMat);
     group.add(particles);
 
     const basePositions = coreGeo.attributes.position.array.slice();
+    const particleBase = positions.slice();
 
     let mouseX = 0;
     let mouseY = 0;
-    const onMouseMove = (e) => {
-      mouseX = (e.clientX / window.innerWidth) * 2 - 1;
-      mouseY = -(e.clientY / window.innerHeight) * 2 + 1;
+    const onPointerMove = (e) => {
+      const x = e.touches ? e.touches[0].clientX : e.clientX;
+      const y = e.touches ? e.touches[0].clientY : e.clientY;
+      mouseX = (x / window.innerWidth) * 2 - 1;
+      mouseY = -(y / window.innerHeight) * 2 + 1;
     };
-    window.addEventListener("mousemove", onMouseMove);
+    window.addEventListener("mousemove", onPointerMove);
+    window.addEventListener("touchmove", onPointerMove, { passive: true });
+
+    // A tap/click anywhere sends a quick ripple of light through the orb -
+    // small, so it reads as "aware of you" rather than a fireworks show.
+    let clickEnergy = 0;
+    const onPointerDown = () => {
+      clickEnergy = 1;
+    };
+    window.addEventListener("pointerdown", onPointerDown);
 
     const onResize = () => {
       camera.aspect = mount.clientWidth / mount.clientHeight;
@@ -82,15 +94,20 @@ export default function Orb3D({ ampRef }) {
       smoothedAmp += (rawAmp - smoothedAmp) * Math.min(1, dt * 6);
       t += dt;
 
+      // Decays smoothly regardless of frame rate - a quick flash of light
+      // rather than a lingering glow.
+      clickEnergy *= Math.exp(-dt * 3.2);
+
       // Slow float, like the orb has real inertia in zero gravity.
       group.position.y = Math.sin(t * 0.5) * 0.12;
       group.position.x = Math.sin(t * 0.33) * 0.04;
 
-      // Idle rotation, heavily damped cursor influence for a graceful drift
-      // rather than snapping to follow the mouse.
+      // Idle rotation, with a snappier-but-still-smooth cursor tilt layered
+      // on top - noticeably "looks toward" the pointer rather than barely
+      // reacting, without ever snapping instantly to it.
       group.rotation.y += dt * 0.12;
-      group.rotation.x += (mouseY * 0.3 - group.rotation.x) * dt * 1.2;
-      group.rotation.z += (mouseX * 0.15 - group.rotation.z) * dt * 1.2;
+      group.rotation.x += (mouseY * 0.4 - group.rotation.x) * dt * 2.4;
+      group.rotation.z += (mouseX * 0.22 - group.rotation.z) * dt * 2.4;
 
       // Coherent, direction-based "breathing" distortion - using each
       // vertex's own 3D direction (not its arbitrary buffer index) as the
@@ -107,20 +124,47 @@ export default function Orb3D({ ampRef }) {
         const nx = bx / len;
         const ny = by / len;
         const nz = bz / len;
+        // Two layered frequencies instead of one, so the motion never quite
+        // repeats itself - reads as organic "flow" rather than a mechanical
+        // pulse.
         const wave =
-          Math.sin(nx * 3 + t * 0.6) * Math.sin(ny * 3 + t * 0.5) * Math.sin(nz * 3 + t * 0.4);
-        const scale = breathe * (1 + wave * 0.035 * (0.4 + smoothedAmp)) + smoothedAmp * 0.1;
+          Math.sin(nx * 3 + t * 0.6) * Math.sin(ny * 3 + t * 0.5) * Math.sin(nz * 3 + t * 0.4) +
+          0.4 * Math.sin(nx * 5 - t * 0.35) * Math.sin(nz * 5 + t * 0.28);
+        const scale = breathe * (1 + wave * 0.035 * (0.4 + smoothedAmp)) + smoothedAmp * 0.1 + clickEnergy * 0.07;
         posAttr.array[ix] = nx * len * scale;
         posAttr.array[ix + 1] = ny * len * scale;
         posAttr.array[ix + 2] = nz * len * scale;
       }
       posAttr.needsUpdate = true;
 
-      const s = breathe * (1 + smoothedAmp * 0.1);
+      const s = breathe * (1 + smoothedAmp * 0.1 + clickEnergy * 0.05);
       glow.scale.setScalar(s);
       glow.rotation.y -= dt * 0.04;
+
+      // Particles drift outward/inward along their own radius in a slow flow
+      // field (not just spinning as a rigid shell), plus a light-speckle
+      // reaction to clicks.
+      const pPos = particles.geometry.attributes.position;
+      for (let i = 0; i < particleCount; i++) {
+        const ix = i * 3;
+        const bx = particleBase[ix];
+        const by = particleBase[ix + 1];
+        const bz = particleBase[ix + 2];
+        const flow = 1 + Math.sin(bx * 1.3 + t * 0.25) * Math.cos(by * 1.1 - t * 0.2) * 0.08;
+        pPos.array[ix] = bx * flow;
+        pPos.array[ix + 1] = by * flow;
+        pPos.array[ix + 2] = bz * flow;
+      }
+      pPos.needsUpdate = true;
       particles.rotation.y -= dt * 0.05;
-      particles.scale.setScalar(1 + smoothedAmp * 0.04);
+      particles.scale.setScalar(1 + smoothedAmp * 0.04 + clickEnergy * 0.08);
+      particleMat.opacity = 0.55 + clickEnergy * 0.35;
+
+      // Slow, subtle hue drift around cyan - keeps the orb feeling alive
+      // without drifting far enough to clash with the UI's blue theme.
+      const hue = (0.52 + Math.sin(t * 0.08) * 0.02) % 1;
+      coreMat.color.setHSL(hue, 1, 0.5 + clickEnergy * 0.15);
+      particleMat.color.setHSL(hue, 1, 0.5 + clickEnergy * 0.2);
 
       renderer.render(scene, camera);
     }
@@ -128,7 +172,9 @@ export default function Orb3D({ ampRef }) {
 
     return () => {
       cancelAnimationFrame(frameId);
-      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mousemove", onPointerMove);
+      window.removeEventListener("touchmove", onPointerMove);
+      window.removeEventListener("pointerdown", onPointerDown);
       window.removeEventListener("resize", onResize);
       renderer.dispose();
       coreGeo.dispose();
