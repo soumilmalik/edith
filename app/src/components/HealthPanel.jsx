@@ -3,10 +3,7 @@ import { useAppState } from "../state/appState.js";
 import { getHealthLog, saveHealthLog } from "../lib/firebase.js";
 import { estimateNutrition } from "../lib/nutrition.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
+import { todayKey } from "../lib/dateKey.js";
 
 export default function HealthPanel() {
   const { user, healthVersion } = useAppState();
@@ -41,6 +38,20 @@ export default function HealthPanel() {
     const next = { ...log, calories: (log.calories || 0) + kcal };
     setLog(next);
     await saveHealthLog(user.uid, dateKey, next);
+  }
+
+  async function addProtein(g) {
+    const next = { ...log, proteinG: (log.proteinG || 0) + g };
+    setLog(next);
+    await saveHealthLog(user.uid, dateKey, next);
+  }
+
+  function promptAndAdd(question, addFn) {
+    const raw = window.prompt(question);
+    if (raw === null) return;
+    const value = Number(raw);
+    if (!Number.isFinite(value) || value <= 0) return;
+    addFn(Math.round(value));
   }
 
   async function addGym(e) {
@@ -120,16 +131,15 @@ export default function HealthPanel() {
 
       <div className="small">Water: {log.water || 0} ml</div>
       <div className="row wrap" style={{ marginBottom: 10 }}>
-        <button onClick={() => addWater(250)}>+250ml</button>
-        <button onClick={() => addWater(500)}>+500ml</button>
+        <button onClick={() => promptAndAdd("Water (ml)?", addWater)}>+ Water</button>
       </div>
 
       <div className="small">
         Calories: {log.calories || 0} kcal &middot; Protein: {log.proteinG || 0} g
       </div>
       <div className="row wrap" style={{ marginBottom: 10 }}>
-        <button onClick={() => addCalories(200)}>+200 kcal</button>
-        <button onClick={() => addCalories(500)}>+500 kcal</button>
+        <button onClick={() => promptAndAdd("Calories (kcal)?", addCalories)}>+ Calories</button>
+        <button onClick={() => promptAndAdd("Protein (g)?", addProtein)}>+ Protein</button>
       </div>
 
       <div className="small" style={{ marginBottom: 4 }}>

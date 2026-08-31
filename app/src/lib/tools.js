@@ -1,6 +1,7 @@
 import * as cal from "./googleCalendar.js";
 import * as fb from "./firebase.js";
 import { pushAppleReminder } from "./appleReminders.js";
+import { todayKey } from "./dateKey.js";
 
 // Claude tool schemas. Kept small and explicit so Claude always reasons
 // about conflicts/domains through the model, not hidden app logic.
@@ -183,10 +184,6 @@ export const TOOL_SCHEMAS = [
     },
   },
 ];
-
-function todayKey() {
-  return new Date().toISOString().slice(0, 10);
-}
 
 const DOMAIN_RE = /Domain:\s*(.+)/i;
 const PRIORITY_RE = /Priority:\s*(\d+)/i;
