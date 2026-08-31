@@ -7,7 +7,7 @@ import { todayKey } from "../lib/dateKey.js";
 
 export default function HealthPanel() {
   const { user, healthVersion } = useAppState();
-  const [log, setLog] = useState({ water: 0, calories: 0, proteinG: 0, gymSessions: [] });
+  const [log, setLog] = useState({ water: 0, calories: 0, proteinG: 0, gymSessions: [], foodEntries: [] });
   const [gymType, setGymType] = useState("");
   const [gymMin, setGymMin] = useState(30);
 
@@ -116,6 +116,15 @@ export default function HealthPanel() {
       ...log,
       calories: (log.calories || 0) + (estimate.calories || 0),
       proteinG: (log.proteinG || 0) + (estimate.proteinG || 0),
+      foodEntries: [
+        ...(log.foodEntries || []),
+        {
+          description: estimate.description,
+          calories: estimate.calories || 0,
+          proteinG: estimate.proteinG || 0,
+          time: new Date().toISOString(),
+        },
+      ],
     };
     setLog(next);
     await saveHealthLog(user.uid, dateKey, next);
@@ -239,6 +248,22 @@ export default function HealthPanel() {
       )}
 
       <div className="small" style={{ marginTop: 12, marginBottom: 4 }}>
+        Food logged today
+      </div>
+      {(log.foodEntries || []).length === 0 && <div className="small" style={{ color: "var(--text-dim)" }}>Nothing logged yet.</div>}
+      {(log.foodEntries || []).map((f, i) => (
+        <div className="list-item" key={i}>
+          <span>
+            {f.time ? new Date(f.time).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) + " - " : ""}
+            {f.description}
+          </span>
+          <span className="badge">
+            {f.calories} kcal / {f.proteinG}g
+          </span>
+        </div>
+      ))}
+
+      <div className="small" style={{ marginTop: 12, marginBottom: 4 }}>
         Gym sessions today
       </div>
       {(log.gymSessions || []).map((g, i) => (
@@ -274,6 +299,11 @@ export default function HealthPanel() {
                   {h.water || 0} ml water &middot; {h.calories || 0} kcal &middot; {h.proteinG || 0} g protein
                   {h.gymSessions?.length ? ` · ${h.gymSessions.map((g) => `${g.type} (${g.durationMin}m)`).join(", ")}` : ""}
                 </span>
+                {h.foodEntries?.length ? (
+                  <span className="small" style={{ color: "var(--text-dim)" }}>
+                    {h.foodEntries.map((f) => f.description).join(", ")}
+                  </span>
+                ) : null}
               </div>
             ))}
         </div>

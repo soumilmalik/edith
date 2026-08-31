@@ -86,7 +86,7 @@ export const TOOL_SCHEMAS = [
   {
     name: "log_health",
     description:
-      "Log water intake (ml), calories, protein (g), or a gym session for a given date (defaults to today). If the user describes/shows food (including via an attached photo) rather than giving exact numbers, estimate calories and protein yourself using general nutritional knowledge - factor in any portion mentioned (e.g. 'shared half') - then log the estimate and tell the user it's a rough estimate.",
+      "Log water intake (ml), calories, protein (g), or a gym session for a given date (defaults to today). If the user describes/shows food (including via an attached photo) rather than giving exact numbers, estimate calories and protein yourself using general nutritional knowledge - factor in any portion mentioned (e.g. 'shared half') - then log the estimate and tell the user it's a rough estimate. Whenever calories/protein come from food or drink (not a generic top-up), always include foodDescription too, so it shows up in the user's visible 'Food logged today' list, not just the totals.",
     input_schema: {
       type: "object",
       properties: {
@@ -94,6 +94,10 @@ export const TOOL_SCHEMAS = [
         waterMl: { type: "integer" },
         calories: { type: "integer" },
         proteinG: { type: "integer", description: "Protein in grams" },
+        foodDescription: {
+          type: "string",
+          description: "Short label for what was eaten/drunk, e.g. 'Half a can of Diet Coke' - set this whenever calories/proteinG are for food/drink.",
+        },
         gymSession: {
           type: "object",
           properties: {
@@ -296,11 +300,18 @@ export async function executeTool(name, input, ctx) {
         calories: current.calories || 0,
         proteinG: current.proteinG || 0,
         gymSessions: current.gymSessions || [],
+        foodEntries: current.foodEntries || [],
       };
       if (input.waterMl) patch.water += input.waterMl;
       if (input.calories) patch.calories += input.calories;
       if (input.proteinG) patch.proteinG += input.proteinG;
       if (input.gymSession) patch.gymSessions = [...patch.gymSessions, input.gymSession];
+      if (input.foodDescription) {
+        patch.foodEntries = [
+          ...patch.foodEntries,
+          { description: input.foodDescription, calories: input.calories || 0, proteinG: input.proteinG || 0, time: new Date().toISOString() },
+        ];
+      }
       await fb.saveHealthLog(ctx.uid, date, patch);
       ctx.onHealthChanged?.();
       return { date, ...patch };
