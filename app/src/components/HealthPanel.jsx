@@ -131,6 +131,7 @@ export default function HealthPanel() {
 
       <div className="small">Water: {log.water || 0} ml</div>
       <div className="row wrap" style={{ marginBottom: 10 }}>
+        <button onClick={() => addWater(250)}>+250ml</button>
         <button onClick={() => promptAndAdd("Water (ml)?", addWater)}>+ Water</button>
       </div>
 
