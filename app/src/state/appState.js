@@ -17,6 +17,12 @@ export function AppStateProvider({ children }) {
   const [calendarVersion, setCalendarVersion] = useState(0);
   const bumpCalendarRefresh = useCallback(() => setCalendarVersion((v) => v + 1), []);
 
+  // Same idea for health logs: log_health from chat/voice writes straight to
+  // Firestore, but HealthPanel only fetches on mount - without this it'd
+  // show stale numbers until manually reloaded.
+  const [healthVersion, setHealthVersion] = useState(0);
+  const bumpHealthRefresh = useCallback(() => setHealthVersion((v) => v + 1), []);
+
   // Timer lives here (not inside TimerReminderPanel) so: (a) Edith can start
   // one from chat/voice and it's the same timer the panel displays, and (b)
   // it keeps counting even if the panel unmounts (e.g. switching mobile
@@ -101,6 +107,8 @@ export function AppStateProvider({ children }) {
     setProfileLocal: setProfile,
     calendarVersion,
     bumpCalendarRefresh,
+    healthVersion,
+    bumpHealthRefresh,
     timerRemainingMs,
     timerLabel,
     startTimer,

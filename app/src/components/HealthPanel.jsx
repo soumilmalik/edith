@@ -9,7 +9,7 @@ function todayKey() {
 }
 
 export default function HealthPanel() {
-  const { user } = useAppState();
+  const { user, healthVersion } = useAppState();
   const [log, setLog] = useState({ water: 0, calories: 0, proteinG: 0, gymSessions: [] });
   const [gymType, setGymType] = useState("");
   const [gymMin, setGymMin] = useState(30);
@@ -27,7 +27,9 @@ export default function HealthPanel() {
   useEffect(() => {
     if (!user) return;
     getHealthLog(user.uid, dateKey).then(setLog);
-  }, [user, dateKey]);
+    // healthVersion: bumped whenever log_health runs from chat/voice, so this
+    // reloads without the user needing to leave and reopen the panel.
+  }, [user, dateKey, healthVersion]);
 
   async function addWater(ml) {
     const next = { ...log, water: (log.water || 0) + ml };

@@ -305,6 +305,7 @@ export async function executeTool(name, input, ctx) {
       if (input.proteinG) patch.proteinG += input.proteinG;
       if (input.gymSession) patch.gymSessions = [...patch.gymSessions, input.gymSession];
       await fb.saveHealthLog(ctx.uid, date, patch);
+      ctx.onHealthChanged?.();
       return { date, ...patch };
     }
     case "get_health_log": {
