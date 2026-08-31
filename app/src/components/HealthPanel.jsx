@@ -12,9 +12,11 @@ export default function HealthPanel() {
   const [gymType, setGymType] = useState("");
   const [gymMin, setGymMin] = useState(30);
 
-  // Food logging (photo and/or text -> AI estimate -> editable review -> log)
+  // Food logging (photo(s) and/or text -> AI estimate -> editable review -> log).
+  // Multiple photos let e.g. a product's front (identifies what it is) and
+  // its nutrition facts panel (the numbers) both feed the same estimate.
   const [foodText, setFoodText] = useState("");
-  const [foodImage, setFoodImage] = useState(null); // { base64, mimeType, previewUrl }
+  const [foodImages, setFoodImages] = useState([]); // [{ base64, mimeType, previewUrl }]
   const [estimating, setEstimating] = useState(false);
   const [estimate, setEstimate] = useState(null); // { description, calories, proteinG, confidence }
   const [foodError, setFoodError] = useState("");
@@ -72,30 +74,40 @@ export default function HealthPanel() {
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
+    if (foodImages.length >= 4) {
+      setFoodError("That's plenty of photos for one entry (max 4).");
+      return;
+    }
     setFoodError("");
     try {
       const base64 = await fileToBase64(file);
       const previewUrl = URL.createObjectURL(file);
-      setFoodImage({ base64, mimeType: file.type, previewUrl });
+      setFoodImages((imgs) => [...imgs, { base64, mimeType: file.type, previewUrl }]);
     } catch {
       setFoodError("Couldn't read that image.");
     }
   }
 
-  function clearFoodImage() {
-    if (foodImage?.previewUrl) URL.revokeObjectURL(foodImage.previewUrl);
-    setFoodImage(null);
+  function clearFoodImage(index) {
+    setFoodImages((imgs) => {
+      if (imgs[index]?.previewUrl) URL.revokeObjectURL(imgs[index].previewUrl);
+      return imgs.filter((_, i) => i !== index);
+    });
+  }
+
+  function clearAllFoodImages() {
+    foodImages.forEach((img) => img.previewUrl && URL.revokeObjectURL(img.previewUrl));
+    setFoodImages([]);
   }
 
   async function runEstimate() {
-    if (!foodText.trim() && !foodImage) return;
+    if (!foodText.trim() && foodImages.length === 0) return;
     setEstimating(true);
     setFoodError("");
     setEstimate(null);
     try {
       const result = await estimateNutrition({
-        mimeType: foodImage?.mimeType,
-        base64: foodImage?.base64,
+        images: foodImages.map((img) => ({ mimeType: img.mimeType, base64: img.base64 })),
         text: foodText.trim(),
       });
       setEstimate({
@@ -135,7 +147,7 @@ export default function HealthPanel() {
   function cancelFoodEntry() {
     setEstimate(null);
     setFoodText("");
-    clearFoodImage();
+    clearAllFoodImages();
     setFoodError("");
   }
 
@@ -173,7 +185,7 @@ export default function HealthPanel() {
       </div>
 
       <div className="small" style={{ marginBottom: 4 }}>
-        Log food (photo and/or description)
+        Log food (photo(s) and/or description)
       </div>
 
       {!estimate && (
@@ -187,18 +199,23 @@ export default function HealthPanel() {
               onChange={handleFoodFile}
               hidden
             />
-            <button type="button" onClick={() => foodFileRef.current?.click()}>
-              <IconCamera /> Photo
+            <button type="button" onClick={() => foodFileRef.current?.click()} disabled={foodImages.length >= 4}>
+              <IconCamera /> {foodImages.length > 0 ? "Add another photo" : "Photo"}
             </button>
-            {foodImage && (
-              <>
-                <img src={foodImage.previewUrl} alt="food" className="chat-attachment-preview" />
-                <button type="button" onClick={clearFoodImage}>
-                  Remove
+            {foodImages.map((img, i) => (
+              <span key={i} className="row" style={{ gap: 4 }}>
+                <img src={img.previewUrl} alt="food" className="chat-attachment-preview" />
+                <button type="button" onClick={() => clearFoodImage(i)}>
+                  &times;
                 </button>
-              </>
-            )}
+              </span>
+            ))}
           </div>
+          {foodImages.length > 0 && (
+            <div className="small" style={{ color: "var(--text-dim)", marginBottom: 6 }}>
+              Tip: one photo of the front of a can/package plus one of its nutrition facts panel helps Edith identify it and read the numbers accurately.
+            </div>
+          )}
           <div className="row wrap" style={{ marginBottom: 6 }}>
             <input
               placeholder="e.g. dal ka parantha, or 'shared half'"
@@ -206,7 +223,11 @@ export default function HealthPanel() {
               onChange={(e) => setFoodText(e.target.value)}
               style={{ flex: 1 }}
             />
-            <button type="button" onClick={runEstimate} disabled={estimating || (!foodText.trim() && !foodImage)}>
+            <button
+              type="button"
+              onClick={runEstimate}
+              disabled={estimating || (!foodText.trim() && foodImages.length === 0)}
+            >
               {estimating ? "Estimating..." : "Estimate"}
             </button>
           </div>

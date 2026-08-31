@@ -156,27 +156,61 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
   }
 }
 
-const NUTRITION_SYSTEM = `You estimate rough nutrition for a food entry - from a photo of a meal, a photo of a
-packaged food's label, and/or a text description. This is a rough personal-tracking estimate, not lab-precise -
-use your general knowledge of typical dishes/ingredients/serving sizes and say so via the confidence field.
-If the text mentions a portion eaten (e.g. "shared half", "ate a few bites", "most of it", "3/4"), scale your
-numbers down to reflect only what was actually consumed, not the full item/dish. If a nutrition label is visible,
-read its per-serving values and multiply by the number of servings actually consumed (inferred from text/photo).
+const NUTRITION_SYSTEM = `You estimate rough nutrition for a food entry, from up to a few photos and/or a text
+description. This is a personal-tracking estimate, not lab-precise - use your general knowledge and say so via
+the confidence field.
+
+When multiple images are provided, use them together - e.g. a product's front-of-package photo identifies what
+the item actually is (so name it specifically in the description, like "Diet Coke" not just "soda can"), while
+a separate nutrition-facts-panel photo gives the numbers. Combine both rather than only looking at one.
+
+Reading a nutrition facts panel - do this precisely, it is the most common source of errors:
+1. Labels list one row per nutrient (Energy/Calories, Protein, Carbohydrate, Sugars, Fat, Sodium, etc.), often
+   with TWO value columns side by side ("Per 100g/100ml" and "Per Serving" - headers vary: "per serve", "per
+   can", "%RDA"). Read the column headers first, before reading any numbers, so you know which column is which.
+2. Match each value to its OWN row by reading the nutrient name and its number together in one pass - do not
+   read a column of numbers top-to-bottom and assign them by vertical position. Rows are frequently uneven
+   (a name can wrap to two lines, a serving-size note can sit between rows), so a number's height on the label
+   is not reliable evidence of which nutrient it belongs to; the text label immediately next to it is. Protein
+   and Carbohydrate are the two nutrients most often swapped this way - explicitly re-check both against their
+   own row label before finalizing your answer.
+3. If both a "per 100g" and a "per serving" column exist, base your numbers on the "per serving" column - that
+   is what one actual serving contains. Only fall back to the per-100g column, scaled by the stated serving
+   size (e.g. "Serving size: 30g" -> multiply per-100g values by 30/100), when no per-serving column is given.
+4. Then scale further for the portion actually consumed if the text/photo indicates less than one full serving
+   (e.g. "shared half", "drank half the can").
+
+If no label is visible, estimate from your general knowledge of typical dishes/ingredients/serving sizes
+instead, and reflect the added uncertainty in confidence.
+
 Respond with ONLY strict JSON, no prose, no markdown fences, in this exact shape:
-{"description":"short label, e.g. 'Half a can of Diet Coke'","calories":number,"proteinG":number,"confidence":"low"|"medium"|"high"}
+{"description":"short label, e.g. 'Diet Coke, 1 can (355ml)'","calories":number,"proteinG":number,"confidence":"low"|"medium"|"high"}
 If you truly cannot estimate anything (no food shown/described), return {"description":"","calories":0,"proteinG":0,"confidence":"low"}.`;
 
 async function handleNutrition(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as { mimeType?: string; base64?: string; text?: string };
-  if (!body?.base64 && !body?.text?.trim()) {
-    return json({ error: "Provide an image, text, or both" }, env, 400);
+  const body = (await request.json()) as {
+    images?: { mimeType: string; base64: string }[];
+    mimeType?: string;
+    base64?: string;
+    text?: string;
+  };
+  const images = body.images?.length
+    ? body.images
+    : body.base64 && body.mimeType
+    ? [{ mimeType: body.mimeType, base64: body.base64 }]
+    : [];
+  if (images.length === 0 && !body?.text?.trim()) {
+    return json({ error: "Provide at least one image, text, or both" }, env, 400);
   }
 
-  const content: any[] = [];
-  if (body.base64 && body.mimeType) {
-    content.push({ type: "image", source: { type: "base64", media_type: body.mimeType, data: body.base64 } });
-  }
-  content.push({ type: "text", text: body.text?.trim() || "Estimate the nutrition for what's shown in the image." });
+  const content: any[] = images.map((img) => ({
+    type: "image",
+    source: { type: "base64", media_type: img.mimeType, data: img.base64 },
+  }));
+  content.push({
+    type: "text",
+    text: body.text?.trim() || "Estimate the nutrition for what's shown in the image(s).",
+  });
 
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
