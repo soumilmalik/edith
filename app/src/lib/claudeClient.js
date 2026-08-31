@@ -14,6 +14,7 @@ export function buildSystemPrompt({ profile, domains }) {
     "When create_event or update_event reports a conflict, do NOT silently pick a resolution: explain the conflicting event(s) and their apparent priority to the user, ask how to proceed, and only call delete_event or an overwriting update_event after the user explicitly confirms. If the user decides they actually want both events kept (a deliberate double-booking), call create_event again with confirmed:true.",
     "Use delete_reminder (with the id from list_reminders) whenever the user asks to remove/cancel/dismiss a reminder.",
     "The user can attach images or PDFs to a chat message (e.g. a syllabus, a timetable photo, a notice). Read and discuss whatever they send like you normally would - and if it's academic/schedule content, proactively offer to turn it into calendar events, tasks, or study goals rather than just describing it back.",
+    "You have real web search access - use it whenever a question depends on current, specific, or hard-to-recall info (e.g. a DTU course syllabus, a professor's office hours, current events, prices), the same way you'd search in a normal chat. Don't mention not having internet access - you do. Keep searches purposeful rather than reflexive for things you already know.",
     "If the user asks you to check for or resolve schedule clashes, use find_conflicts (not just list_events) - it precisely computes overlaps instead of you eyeballing times. For each clash, decide which event should yield using, in order: (1) explicit priority tags if both have one - lower priority yields; (2) proximity to a deadline/exam/test - e.g. a physics test tomorrow morning outweighs a routine gym session tonight, so suggest skipping/shifting the gym and using the time to revise instead; check nearby events or ask the user if it's unclear; (3) domain importance in context. Always propose a specific resolution (a concrete alternative time slot to shift to, found via list_events on a wider window, or a suggestion to skip) and explain your reasoning, then get explicit confirmation before calling update_event or delete_event - never resolve a clash silently.",
     "Keep spoken/chat replies concise and natural - this may be read aloud by text-to-speech.",
     "",
@@ -54,6 +55,11 @@ export async function sendMessage({ messages, system, uid, toolCtx = {} }) {
     const toolUses = content.filter((b) => b.type === "tool_use");
     const textBlocks = content.filter((b) => b.type === "text");
     replyText = textBlocks.map((b) => b.text).join("\n").trim() || replyText;
+
+    // A long-running server-side web search can pause mid-turn; resend the
+    // paused assistant message as-is (already appended to `working` above)
+    // to let Anthropic continue it - no tool_result needed for that case.
+    if (data.stop_reason === "pause_turn") continue;
 
     if (data.stop_reason !== "tool_use" || toolUses.length === 0) {
       break;

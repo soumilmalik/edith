@@ -73,6 +73,14 @@ async function requireAuthorizedUser(request: Request, env: Env): Promise<Respon
   return null; // authorized
 }
 
+// Server-side tool: runs entirely on Anthropic's infra (no client execution
+// loop needed, unlike our custom tools). max_uses caps it at 3 searches per
+// message so one request can't run away - at $10/1000 searches that's 3
+// cents worst case, plus normal token cost for the results. The _20260209
+// variant adds dynamic filtering (Claude writes code to filter results before
+// they hit context), which keeps those token costs down too.
+const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search", max_uses: 3 };
+
 async function handleChat(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as { system?: string; messages?: unknown[]; tools?: unknown[] };
 
@@ -88,7 +96,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       max_tokens: 1500,
       system: body.system || "",
       messages: body.messages || [],
-      tools: body.tools || [],
+      tools: [...(body.tools || []), WEB_SEARCH_TOOL],
     }),
   });
 
