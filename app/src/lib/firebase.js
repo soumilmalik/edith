@@ -90,7 +90,7 @@ export async function saveDomains(uid, list) {
 
 export async function getHealthLog(uid, dateKey) {
   const snap = await getDoc(doc(db, "users", uid, "healthLogs", dateKey));
-  return snap.exists() ? snap.data() : { water: 0, calories: 0, gymSessions: [] };
+  return snap.exists() ? snap.data() : { water: 0, calories: 0, proteinG: 0, gymSessions: [] };
 }
 
 export async function saveHealthLog(uid, dateKey, data) {

@@ -148,6 +148,55 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
   }
 }
 
+const NUTRITION_SYSTEM = `You estimate rough nutrition for a food entry - from a photo of a meal, a photo of a
+packaged food's label, and/or a text description. This is a rough personal-tracking estimate, not lab-precise -
+use your general knowledge of typical dishes/ingredients/serving sizes and say so via the confidence field.
+If the text mentions a portion eaten (e.g. "shared half", "ate a few bites", "most of it", "3/4"), scale your
+numbers down to reflect only what was actually consumed, not the full item/dish. If a nutrition label is visible,
+read its per-serving values and multiply by the number of servings actually consumed (inferred from text/photo).
+Respond with ONLY strict JSON, no prose, no markdown fences, in this exact shape:
+{"description":"short label, e.g. 'Half a can of Diet Coke'","calories":number,"proteinG":number,"confidence":"low"|"medium"|"high"}
+If you truly cannot estimate anything (no food shown/described), return {"description":"","calories":0,"proteinG":0,"confidence":"low"}.`;
+
+async function handleNutrition(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as { mimeType?: string; base64?: string; text?: string };
+  if (!body?.base64 && !body?.text?.trim()) {
+    return json({ error: "Provide an image, text, or both" }, env, 400);
+  }
+
+  const content: any[] = [];
+  if (body.base64 && body.mimeType) {
+    content.push({ type: "image", source: { type: "base64", media_type: body.mimeType, data: body.base64 } });
+  }
+  content.push({ type: "text", text: body.text?.trim() || "Estimate the nutrition for what's shown in the image." });
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 500,
+      system: NUTRITION_SYSTEM,
+      messages: [{ role: "user", content }],
+    }),
+  });
+
+  const data = (await res.json()) as any;
+  if (!res.ok) return json(data, env, res.status);
+
+  const text = (data.content || []).find((b: any) => b.type === "text")?.text || "{}";
+  const cleaned = text.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
+  try {
+    return json(JSON.parse(cleaned), env);
+  } catch {
+    return json({ description: "", calories: 0, proteinG: 0, confidence: "low", raw: text }, env);
+  }
+}
+
 // Exchanges a one-time Google authorization code (from the frontend's
 // initCodeClient popup) for an access token + refresh token. The refresh
 // token is handed back to the frontend to store in the user's own Firestore
@@ -288,6 +337,9 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/api/extract") {
       return handleExtract(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/api/nutrition") {
+      return handleNutrition(request, env);
     }
     if (request.method === "POST" && url.pathname === "/api/calendar/exchange") {
       return handleCalendarExchange(request, env);

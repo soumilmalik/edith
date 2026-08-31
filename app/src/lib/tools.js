@@ -84,13 +84,15 @@ export const TOOL_SCHEMAS = [
   },
   {
     name: "log_health",
-    description: "Log water intake (ml), calories, or a gym session for a given date (defaults to today).",
+    description:
+      "Log water intake (ml), calories, protein (g), or a gym session for a given date (defaults to today). If the user describes/shows food (including via an attached photo) rather than giving exact numbers, estimate calories and protein yourself using general nutritional knowledge - factor in any portion mentioned (e.g. 'shared half') - then log the estimate and tell the user it's a rough estimate.",
     input_schema: {
       type: "object",
       properties: {
         date: { type: "string", description: "YYYY-MM-DD, defaults to today" },
         waterMl: { type: "integer" },
         calories: { type: "integer" },
+        proteinG: { type: "integer", description: "Protein in grams" },
         gymSession: {
           type: "object",
           properties: {
@@ -292,9 +294,15 @@ export async function executeTool(name, input, ctx) {
     case "log_health": {
       const date = input.date || todayKey();
       const current = await fb.getHealthLog(ctx.uid, date);
-      const patch = { water: current.water || 0, calories: current.calories || 0, gymSessions: current.gymSessions || [] };
+      const patch = {
+        water: current.water || 0,
+        calories: current.calories || 0,
+        proteinG: current.proteinG || 0,
+        gymSessions: current.gymSessions || [],
+      };
       if (input.waterMl) patch.water += input.waterMl;
       if (input.calories) patch.calories += input.calories;
+      if (input.proteinG) patch.proteinG += input.proteinG;
       if (input.gymSession) patch.gymSessions = [...patch.gymSessions, input.gymSession];
       await fb.saveHealthLog(ctx.uid, date, patch);
       return { date, ...patch };
