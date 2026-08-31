@@ -4,6 +4,7 @@ import { getHealthLog, saveHealthLog, listHealthLogs } from "../lib/firebase.js"
 import { estimateNutrition } from "../lib/nutrition.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
 import { todayKey } from "../lib/dateKey.js";
+import { IconCamera, IconHistory } from "./icons.jsx";
 
 export default function HealthPanel() {
   const { user, healthVersion } = useAppState();
@@ -187,7 +188,7 @@ export default function HealthPanel() {
               hidden
             />
             <button type="button" onClick={() => foodFileRef.current?.click()}>
-              📷 Photo
+              <IconCamera /> Photo
             </button>
             {foodImage && (
               <>
@@ -281,7 +282,7 @@ export default function HealthPanel() {
 
       <div className="row" style={{ marginTop: 14, marginBottom: showHistory ? 6 : 0 }}>
         <button type="button" onClick={toggleHistory}>
-          {showHistory ? "Hide history" : "📜 View history"}
+          {showHistory ? "Hide history" : <><IconHistory /> View history</>}
         </button>
       </div>
 

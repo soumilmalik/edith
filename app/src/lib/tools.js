@@ -190,7 +190,7 @@ export const TOOL_SCHEMAS = [
   {
     name: "play_alexa_music",
     description:
-      "Triggers the user's personal shortcut that plays 'Mulemantra' on loop on their Alexa via Spotify. Call this whenever the user asks to play Mulemantra / that song on Alexa - phrasing and voice transcription of the name can vary (e.g. 'play mole manter', 'put on mulemantra'). No input needed.",
+      "Triggers the user's personal shortcut that plays 'Mulemantra' (aka 'Mool Mantra') on loop on their Alexa via Spotify. Call this whenever the user asks to play that song on Alexa - phrasing and voice transcription of the name vary a lot (e.g. 'play mole manter', 'play mool mantra', 'put on mulemantra'). No input needed.",
     input_schema: { type: "object", properties: {} },
   },
 ];
