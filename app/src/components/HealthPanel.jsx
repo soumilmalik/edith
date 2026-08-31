@@ -4,7 +4,7 @@ import { getHealthLog, saveHealthLog, listHealthLogs } from "../lib/firebase.js"
 import { estimateNutrition } from "../lib/nutrition.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
 import { todayKey } from "../lib/dateKey.js";
-import { IconCamera, IconHistory } from "./icons.jsx";
+import { IconCamera, IconHistory } from "./SmallIcons.jsx";
 
 export default function HealthPanel() {
   const { user, healthVersion } = useAppState();

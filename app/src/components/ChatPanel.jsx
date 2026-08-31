@@ -8,7 +8,7 @@ import { startScribeStream } from "../lib/scribeStream.js";
 import { auth } from "../lib/firebase.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
 import VoiceControls from "./VoiceControls.jsx";
-import { IconAttach } from "./icons.jsx";
+import { IconAttach } from "./SmallIcons.jsx";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
