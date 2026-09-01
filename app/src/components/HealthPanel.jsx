@@ -4,7 +4,7 @@ import { getHealthLog, saveHealthLog, listHealthLogs } from "../lib/firebase.js"
 import { estimateNutrition } from "../lib/nutrition.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
 import { todayKey } from "../lib/dateKey.js";
-import { IconCamera, IconHistory } from "./SmallIcons.jsx";
+import { IconCamera, IconHistory, IconUpload } from "./SmallIcons.jsx";
 
 export default function HealthPanel() {
   const { user, healthVersion } = useAppState();
@@ -21,6 +21,7 @@ export default function HealthPanel() {
   const [estimate, setEstimate] = useState(null); // { description, calories, proteinG, confidence }
   const [foodError, setFoodError] = useState("");
   const foodFileRef = useRef(null);
+  const foodUploadRef = useRef(null);
 
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState(null); // null = not loaded yet
@@ -199,8 +200,17 @@ export default function HealthPanel() {
               onChange={handleFoodFile}
               hidden
             />
+            <input type="file" accept="image/*" ref={foodUploadRef} onChange={handleFoodFile} hidden />
             <button type="button" onClick={() => foodFileRef.current?.click()} disabled={foodImages.length >= 4}>
-              <IconCamera /> {foodImages.length > 0 ? "Add another photo" : "Photo"}
+              <IconCamera /> {foodImages.length > 0 ? "Add another" : "Photo"}
+            </button>
+            <button
+              type="button"
+              title="Upload a photo you already took"
+              onClick={() => foodUploadRef.current?.click()}
+              disabled={foodImages.length >= 4}
+            >
+              <IconUpload /> Upload
             </button>
             {foodImages.map((img, i) => (
               <span key={i} className="row" style={{ gap: 4 }}>

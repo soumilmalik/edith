@@ -42,6 +42,16 @@ export function IconHistory(props) {
   );
 }
 
+export function IconUpload(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M12 15V4" />
+      <path d="M7 9l5-5 5 5" />
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </svg>
+  );
+}
+
 export function IconMic(props) {
   return (
     <svg {...base} strokeWidth={1.8} {...props}>
