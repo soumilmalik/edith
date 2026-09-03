@@ -61,11 +61,23 @@ async function callWorkerStream(body, { onTextDelta } = {}) {
       case "content_block_delta": {
         const block = blocks[evt.index];
         if (!block) break;
-        if (evt.delta.type === "text_delta") {
-          block.text = (block.text || "") + evt.delta.text;
-          onTextDelta?.(evt.delta.text);
-        } else if (evt.delta.type === "input_json_delta") {
-          block._rawJson = (block._rawJson || "") + evt.delta.partial_json;
+        const delta = evt.delta;
+        if (delta.type === "text_delta") {
+          block.text = (block.text || "") + delta.text;
+          onTextDelta?.(delta.text);
+        } else if (delta.type === "input_json_delta") {
+          block._rawJson = (block._rawJson || "") + delta.partial_json;
+        } else if (delta.type === "thinking_delta") {
+          // Extended-thinking blocks stream their content this way, not via
+          // text_delta - missing this meant a resent thinking block came
+          // back with no actual thinking text, which the API rejects
+          // ("each thinking block must contain thinking") on the very next
+          // request that includes it in history.
+          block.thinking = (block.thinking || "") + delta.thinking;
+        } else if (delta.type === "signature_delta") {
+          block.signature = (block.signature || "") + delta.signature;
+        } else if (delta.type === "citations_delta") {
+          block.citations = [...(block.citations || []), delta.citation];
         }
         break;
       }

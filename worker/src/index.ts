@@ -17,6 +17,17 @@ export interface Env {
 const ANTHROPIC_MODEL = "claude-sonnet-5";
 const ANTHROPIC_VERSION = "2023-06-01";
 
+// claude-sonnet-5 has extended thinking on by default with no way to opt out
+// of the hidden reasoning pass short of this - it was adding real latency to
+// every single reply (even "what's on my calendar") for a personal assistant
+// that mostly does short structured tool calls and casual chat, not deep
+// reasoning tasks. It was also the root cause of a real bug: with thinking on
+// and display defaulting to "omitted" (no summary text), a client-side
+// streaming bug that dropped a thinking block's signature produced a
+// malformed empty thinking block that got rejected by the API the next time
+// it was resent as part of the conversation history.
+const THINKING_DISABLED = { type: "disabled" as const };
+
 const JWKS = createRemoteJWKSet(
   new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com")
 );
@@ -109,6 +120,7 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
       system: [{ type: "text", text: body.system || "", cache_control: { type: "ephemeral" } }],
       messages: body.messages || [],
       tools,
+      thinking: THINKING_DISABLED,
       stream: true,
     }),
   });
@@ -163,6 +175,7 @@ async function handleExtract(request: Request, env: Env): Promise<Response> {
           content: [contentBlock, { type: "text", text: "Extract the events as instructed." }],
         },
       ],
+      thinking: THINKING_DISABLED,
     }),
   });
 
@@ -247,6 +260,7 @@ async function handleNutrition(request: Request, env: Env): Promise<Response> {
       max_tokens: 500,
       system: NUTRITION_SYSTEM,
       messages: [{ role: "user", content }],
+      thinking: THINKING_DISABLED,
     }),
   });
 
@@ -303,6 +317,7 @@ async function handlePrioritize(request: Request, env: Env): Promise<Response> {
       max_tokens: 200,
       system: PRIORITIZE_SYSTEM,
       messages: [{ role: "user", content: context }],
+      thinking: THINKING_DISABLED,
     }),
   });
 
