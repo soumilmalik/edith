@@ -55,6 +55,19 @@ export function TimerIcon(props) {
   );
 }
 
+export function TaskIcon(props) {
+  return (
+    <svg {...common} {...props}>
+      <path d="M4.5 6.5l1.5 1.5 2.5-2.5" />
+      <path d="M11 6.5h9" />
+      <path d="M4.5 12.5l1.5 1.5 2.5-2.5" />
+      <path d="M11 12.5h9" />
+      <path d="M4.5 18.5l1.5 1.5 2.5-2.5" />
+      <path d="M11 18.5h9" />
+    </svg>
+  );
+}
+
 export function ProfileIcon(props) {
   return (
     <svg {...common} {...props}>

@@ -2,6 +2,7 @@ import * as cal from "./googleCalendar.js";
 import * as fb from "./firebase.js";
 import { pushAppleReminder } from "./appleReminders.js";
 import { todayKey } from "./dateKey.js";
+import { computeInsertOrder, sortByOrder } from "./taskOrder.js";
 
 // Claude tool schemas. Kept small and explicit so Claude always reasons
 // about conflicts/domains through the model, not hidden app logic.
@@ -175,17 +176,23 @@ export const TOOL_SCHEMAS = [
   },
   {
     name: "add_task",
-    description: "Add a standalone task/goal (not tied to a specific calendar time) tagged with a domain and priority.",
+    description:
+      "Add a standalone task/goal (not tied to a specific calendar time) to the user's Task List panel, tagged with a domain and priority. The Task List is always sorted highest-priority first, so weigh the priority (1 lowest - 5 most urgent/important) against the user's other current tasks rather than defaulting to the middle - use list_tasks first if you need to see what's already there.",
     input_schema: {
       type: "object",
       properties: {
         title: { type: "string" },
         domain: { type: "string" },
-        priority: { type: "integer" },
+        priority: { type: "integer", description: "1 (lowest) to 5 (most urgent/important)" },
         dueDate: { type: "string" },
       },
       required: ["title", "domain"],
     },
+  },
+  {
+    name: "list_tasks",
+    description: "List all current tasks on the Task List panel, with their priority/domain/done state.",
+    input_schema: { type: "object", properties: {} },
   },
   {
     name: "play_alexa_music",
@@ -350,14 +357,22 @@ export async function executeTool(name, input, ctx) {
       return { saved: true, profile: next };
     }
     case "add_task": {
+      const priority = input.priority || 3;
+      const existing = await fb.listTasks(ctx.uid);
+      const order = computeInsertOrder(existing, priority);
       const id = await fb.addTask(ctx.uid, {
         title: input.title,
         domain: input.domain,
-        priority: input.priority || 3,
+        priority,
+        order,
         dueDate: input.dueDate || null,
         done: false,
       });
-      return { id, ...input };
+      ctx.onTasksChanged?.();
+      return { id, ...input, priority };
+    }
+    case "list_tasks": {
+      return sortByOrder(await fb.listTasks(ctx.uid));
     }
     case "play_alexa_music": {
       const url = import.meta.env.VITE_ALEXA_SHORTCUT_URL;

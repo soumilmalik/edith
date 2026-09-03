@@ -52,6 +52,25 @@ export function IconUpload(props) {
   );
 }
 
+export function IconCheck(props) {
+  return (
+    <svg {...base} strokeWidth={2.6} {...props}>
+      <path d="M4 12.5l5 5L20 6.5" />
+    </svg>
+  );
+}
+
+export function IconTrash(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 7h16" />
+      <path d="M9 7V4.5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1V7" />
+      <path d="M6 7l1 13a1.5 1.5 0 0 0 1.5 1.5h7A1.5 1.5 0 0 0 17 20l1-13" />
+      <path d="M10 11v6M14 11v6" />
+    </svg>
+  );
+}
+
 export function IconMic(props) {
   return (
     <svg {...base} strokeWidth={1.8} {...props}>

@@ -7,6 +7,7 @@ import ChatPanel from "./components/ChatPanel.jsx";
 import CalendarView from "./components/CalendarView.jsx";
 import TimerReminderPanel from "./components/TimerReminderPanel.jsx";
 import HealthPanel from "./components/HealthPanel.jsx";
+import TaskList from "./components/TaskList.jsx";
 import DomainSettings from "./components/DomainSettings.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import UploadSchedule from "./components/UploadSchedule.jsx";
@@ -26,6 +27,7 @@ function DesktopDashboard() {
       <Orb3D ampRef={ampRef} typeRef={typeRef} />
       <div className="hud-layer">
         <div className="left-col">
+          <TaskList />
           <CalendarView />
           <UploadSchedule />
         </div>

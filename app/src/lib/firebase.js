@@ -16,11 +16,13 @@ import {
   updateDoc,
   deleteDoc,
   query,
+  where,
   orderBy,
   limit,
   getDocs,
   serverTimestamp,
 } from "firebase/firestore";
+import { todayKey } from "./dateKey.js";
 
 const firebaseConfig = {
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
@@ -137,6 +139,20 @@ export async function saveGoogleRefreshToken(uid, refreshToken) {
 
 export async function deleteTask(uid, taskId) {
   await deleteDoc(doc(db, "users", uid, "tasks", taskId));
+}
+
+// Once per local day (tracked in a small meta doc, not per-task), clears out
+// completed tasks so the list starts the day fresh - unticked tasks are
+// simply never touched, which is what "carries them forward" to the next day.
+export async function rolloverTasksIfNewDay(uid) {
+  const today = todayKey();
+  const metaRef = doc(db, "users", uid, "meta", "taskRollover");
+  const metaSnap = await getDoc(metaRef);
+  if (metaSnap.exists() && metaSnap.data().date === today) return;
+
+  const doneSnap = await getDocs(query(collection(db, "users", uid, "tasks"), where("done", "==", true)));
+  await Promise.all(doneSnap.docs.map((d) => deleteDoc(d.ref)));
+  await setDoc(metaRef, { date: today }, { merge: true });
 }
 
 export async function listReminders(uid) {

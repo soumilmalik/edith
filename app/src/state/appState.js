@@ -23,6 +23,11 @@ export function AppStateProvider({ children }) {
   const [healthVersion, setHealthVersion] = useState(0);
   const bumpHealthRefresh = useCallback(() => setHealthVersion((v) => v + 1), []);
 
+  // Same idea for the Task List: add_task from chat/voice writes straight to
+  // Firestore, but TaskList only fetches on mount.
+  const [tasksVersion, setTasksVersion] = useState(0);
+  const bumpTasksRefresh = useCallback(() => setTasksVersion((v) => v + 1), []);
+
   // Timer lives here (not inside TimerReminderPanel) so: (a) Edith can start
   // one from chat/voice and it's the same timer the panel displays, and (b)
   // it keeps counting even if the panel unmounts (e.g. switching mobile
@@ -109,6 +114,8 @@ export function AppStateProvider({ children }) {
     bumpCalendarRefresh,
     healthVersion,
     bumpHealthRefresh,
+    tasksVersion,
+    bumpTasksRefresh,
     timerRemainingMs,
     timerLabel,
     startTimer,

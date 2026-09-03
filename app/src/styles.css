@@ -543,6 +543,114 @@ input[type="file"]::file-selector-button:hover {
   text-transform: uppercase;
 }
 
+.task-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 9px;
+  border: 1px solid var(--panel-border);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.25);
+}
+
+.task-row.dragging {
+  box-shadow: 0 0 22px rgba(var(--edith-glow-rgb), 0.65);
+  z-index: 20;
+  cursor: grabbing;
+}
+
+.task-check {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  border-radius: 6px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.task-check.checked {
+  background: rgba(var(--edith-glow-rgb), 0.3);
+  border-color: var(--edith-blue);
+  color: var(--edith-blue);
+}
+
+.task-drag-handle {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.task-title {
+  overflow-wrap: break-word;
+  min-width: 0;
+  font-size: 0.9rem;
+}
+
+.task-row.done .task-title {
+  text-decoration: line-through;
+  color: var(--text-dim);
+}
+
+.task-priority {
+  flex-shrink: 0;
+  font-size: 0.65rem;
+  font-family: var(--font-display);
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--panel-border);
+  color: var(--text-dim);
+}
+
+.task-priority.p5,
+.task-priority.p4 {
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.task-priority.p3 {
+  color: var(--edith-blue);
+  border-color: var(--edith-blue);
+}
+
+.task-delete {
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  border-radius: 50%;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: var(--text-dim);
+  border-color: transparent;
+  box-shadow: none;
+}
+
+.task-delete:hover:not(:disabled) {
+  color: var(--danger);
+  border-color: var(--danger);
+  background: rgba(255, 77, 109, 0.12);
+  box-shadow: 0 0 12px rgba(255, 77, 109, 0.5);
+}
+
 .row {
   display: flex;
   gap: 8px;

@@ -14,7 +14,8 @@ const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
 
 export default function ChatPanel({ ampRef, typeRef }) {
-  const { user, profile, domains, setProfileLocal, bumpCalendarRefresh, bumpHealthRefresh, startTimer } = useAppState();
+  const { user, profile, domains, setProfileLocal, bumpCalendarRefresh, bumpHealthRefresh, bumpTasksRefresh, startTimer } =
+    useAppState();
   const isNewProfile = !profile.bio && !profile.decadeGoals && !profile.yearGoals;
   const [displayLog, setDisplayLog] = useState([
     {
@@ -139,6 +140,7 @@ export default function ChatPanel({ ampRef, typeRef }) {
           onProfileUpdated: setProfileLocal,
           onCalendarChanged: bumpCalendarRefresh,
           onHealthChanged: bumpHealthRefresh,
+          onTasksChanged: bumpTasksRefresh,
           onStartTimer: startTimer,
         },
       });

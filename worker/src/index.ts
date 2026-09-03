@@ -239,6 +239,64 @@ async function handleNutrition(request: Request, env: Env): Promise<Response> {
   }
 }
 
+const PRIORITIZE_SYSTEM = `You assign a priority (1 = lowest, 5 = most urgent/important) and a life domain to a
+single new task for a personal task list that is always displayed highest-priority first.
+
+Base the priority on: explicit urgency/deadline language in the task text (e.g. "today", "asap", "due tomorrow"
+imply higher priority than something with no time pressure), how it compares to the other tasks already on the
+list (given below - spread tasks across the 1-5 range so the ordering is actually useful; do not call
+everything a 3 or a 5), and which of the user's life domains it most plausibly belongs to.
+
+Respond with ONLY strict JSON, no prose, no markdown fences, in this exact shape:
+{"priority":number,"domain":"string"}`;
+
+async function handlePrioritize(request: Request, env: Env): Promise<Response> {
+  const body = (await request.json()) as {
+    title?: string;
+    domains?: string[];
+    existingTasks?: { title: string; priority: number }[];
+  };
+  if (!body?.title?.trim()) return json({ error: "title is required" }, env, 400);
+
+  const context = [
+    `Life domains: ${(body.domains || []).join(", ") || "(none set)"}`,
+    body.existingTasks?.length
+      ? `Other tasks currently on the list (title - priority):\n${body.existingTasks
+          .map((t) => `- ${t.title} - ${t.priority}`)
+          .join("\n")}`
+      : "No other tasks currently on the list.",
+    `New task to prioritize: "${body.title.trim()}"`,
+  ].join("\n\n");
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 200,
+      system: PRIORITIZE_SYSTEM,
+      messages: [{ role: "user", content: context }],
+    }),
+  });
+
+  const data = (await res.json()) as any;
+  if (!res.ok) return json(data, env, res.status);
+
+  const text = (data.content || []).find((b: any) => b.type === "text")?.text || "{}";
+  const cleaned = text.replace(/^```(json)?/i, "").replace(/```$/, "").trim();
+  try {
+    const parsed = JSON.parse(cleaned);
+    const priority = Math.max(1, Math.min(5, Math.round(Number(parsed.priority)) || 3));
+    return json({ priority, domain: parsed.domain || "" }, env);
+  } catch {
+    return json({ priority: 3, domain: "" }, env);
+  }
+}
+
 // Exchanges a one-time Google authorization code (from the frontend's
 // initCodeClient popup) for an access token + refresh token. The refresh
 // token is handed back to the frontend to store in the user's own Firestore
@@ -382,6 +440,9 @@ export default {
     }
     if (request.method === "POST" && url.pathname === "/api/nutrition") {
       return handleNutrition(request, env);
+    }
+    if (request.method === "POST" && url.pathname === "/api/prioritize") {
+      return handlePrioritize(request, env);
     }
     if (request.method === "POST" && url.pathname === "/api/calendar/exchange") {
       return handleCalendarExchange(request, env);

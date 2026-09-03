@@ -6,13 +6,15 @@ import CalendarView from "./CalendarView.jsx";
 import UploadSchedule from "./UploadSchedule.jsx";
 import TimerReminderPanel from "./TimerReminderPanel.jsx";
 import HealthPanel from "./HealthPanel.jsx";
+import TaskList from "./TaskList.jsx";
 import DomainSettings from "./DomainSettings.jsx";
 import Onboarding from "./Onboarding.jsx";
-import { ChatIcon, CalendarIcon, HealthIcon, TimerIcon, ProfileIcon } from "./Icons.jsx";
+import { ChatIcon, CalendarIcon, TaskIcon, HealthIcon, TimerIcon, ProfileIcon } from "./Icons.jsx";
 import { signOutUser } from "../lib/firebase.js";
 
 const TABS = [
   { key: "chat", label: "Edith", Icon: ChatIcon },
+  { key: "tasks", label: "Tasks", Icon: TaskIcon },
   { key: "calendar", label: "Calendar", Icon: CalendarIcon },
   { key: "health", label: "Health", Icon: HealthIcon },
   { key: "timers", label: "Timers", Icon: TimerIcon },
@@ -31,6 +33,7 @@ export default function MobileLayout() {
 
         <div className="mobile-content">
           {tab === "chat" && <ChatPanel ampRef={ampRef} />}
+          {tab === "tasks" && <TaskList />}
           {tab === "calendar" && (
             <>
               <CalendarView />
