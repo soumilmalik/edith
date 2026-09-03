@@ -84,6 +84,18 @@ const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search", max_u
 async function handleChat(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as { system?: string; messages?: unknown[]; tools?: unknown[] };
 
+  // The system prompt and tool schemas are identical on every single request
+  // in a conversation (system only changes if the user edits their profile;
+  // tools never change) - marking cache breakpoints on both means Anthropic
+  // reuses that processed prefix instead of reprocessing it from scratch on
+  // every message and every tool-loop round, which is a real latency (and
+  // cost) win, not just a perceived one. Requires >=1024 tokens on Sonnet to
+  // actually take effect - below that it's a harmless no-op.
+  const tools: Record<string, any>[] = [...(body.tools || []), WEB_SEARCH_TOOL] as Record<string, any>[];
+  if (tools.length > 0) {
+    tools[tools.length - 1] = { ...tools[tools.length - 1], cache_control: { type: "ephemeral" } };
+  }
+
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
@@ -94,15 +106,26 @@ async function handleChat(request: Request, env: Env): Promise<Response> {
     body: JSON.stringify({
       model: ANTHROPIC_MODEL,
       max_tokens: 1500,
-      system: body.system || "",
+      system: [{ type: "text", text: body.system || "", cache_control: { type: "ephemeral" } }],
       messages: body.messages || [],
-      tools: [...(body.tools || []), WEB_SEARCH_TOOL],
+      tools,
+      stream: true,
     }),
   });
 
-  const data = await res.json();
-  if (!res.ok) return json(data, env, res.status);
-  return json(data, env);
+  if (!res.ok || !res.body) {
+    const data = await res.json();
+    return json(data, env, res.status);
+  }
+
+  // Pipe Anthropic's SSE stream straight through to the browser (same
+  // passthrough technique already used for TTS audio below) - the client
+  // parses events itself so text can render as it's generated instead of
+  // waiting for the whole reply.
+  return new Response(res.body, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream", ...corsHeaders(env) },
+  });
 }
 
 const EXTRACT_SYSTEM = `You extract calendar events from an uploaded schedule/timetable image or PDF.

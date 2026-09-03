@@ -340,6 +340,16 @@ input[type="file"] {
   animation: live-pulse 1.6s ease-in-out infinite;
 }
 
+.chat-msg.streaming {
+  font-style: italic;
+  border: 1px dashed var(--panel-border);
+  animation: live-pulse 1.6s ease-in-out infinite;
+}
+
+.chat-msg.streaming .chat-markdown {
+  font-style: italic;
+}
+
 @keyframes live-pulse {
   0%,
   100% {

@@ -27,6 +27,7 @@ export default function ChatPanel({ ampRef, typeRef }) {
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [streamingText, setStreamingText] = useState(""); // grows live as the reply streams in; "" while still waiting on the first token
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [liveTranscript, setLiveTranscript] = useState("");
@@ -51,7 +52,7 @@ export default function ChatPanel({ ampRef, typeRef }) {
 
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [displayLog, liveTranscript]);
+  }, [displayLog, liveTranscript, streamingText]);
 
   async function attachFile(file) {
     setAttachError("");
@@ -105,6 +106,7 @@ export default function ChatPanel({ ampRef, typeRef }) {
     if (!trimmed && !att) return;
     if (!user) return;
     setSending(true);
+    setStreamingText("");
 
     setDisplayLog((log) => [
       ...log,
@@ -143,6 +145,7 @@ export default function ChatPanel({ ampRef, typeRef }) {
           onTasksChanged: bumpTasksRefresh,
           onStartTimer: startTimer,
         },
+        onTextUpdate: setStreamingText,
       });
       historyRef.current = messages;
       const finalText = replyText || "(no reply)";
@@ -152,6 +155,7 @@ export default function ChatPanel({ ampRef, typeRef }) {
       setDisplayLog((log) => [...log, { role: "assistant", text: `Error: ${err.message}` }]);
     } finally {
       setSending(false);
+      setStreamingText("");
     }
   }
 
@@ -264,6 +268,17 @@ export default function ChatPanel({ ampRef, typeRef }) {
             )}
           </div>
         ))}
+        {sending && (
+          <div className="chat-msg assistant streaming">
+            {streamingText ? (
+              <div className="chat-markdown">
+                <ReactMarkdown>{streamingText}</ReactMarkdown>
+              </div>
+            ) : (
+              "Thinking..."
+            )}
+          </div>
+        )}
         {listening && (
           <div className="chat-msg user live-transcript">{liveTranscript || "Listening..."}</div>
         )}

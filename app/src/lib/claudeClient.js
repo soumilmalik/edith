@@ -31,32 +31,115 @@ export function buildSystemPrompt({ profile, domains }) {
   ].join("\n");
 }
 
-async function callWorker(body) {
+// Parses Anthropic's SSE stream directly (no SDK - the whole Worker/client
+// is raw-fetch by design) into the same {content, stop_reason} shape the old
+// non-streaming response had, so the tool-loop below barely had to change.
+// onTextDelta fires with each new chunk of visible text as it's generated,
+// which is what lets the chat bubble grow live instead of appearing all at
+// once at the end.
+async function callWorkerStream(body, { onTextDelta } = {}) {
   const idToken = await auth.currentUser?.getIdToken();
   const res = await fetch(`${WORKER_URL}/api/chat`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${idToken}` },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new Error(`Worker /api/chat ${res.status}: ${await res.text()}`);
-  return res.json();
+  if (!res.ok || !res.body) throw new Error(`Worker /api/chat ${res.status}: ${await res.text()}`);
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const blocks = [];
+  let stopReason = null;
+
+  function handleEvent(evt) {
+    switch (evt.type) {
+      case "content_block_start": {
+        blocks[evt.index] = { ...evt.content_block };
+        break;
+      }
+      case "content_block_delta": {
+        const block = blocks[evt.index];
+        if (!block) break;
+        if (evt.delta.type === "text_delta") {
+          block.text = (block.text || "") + evt.delta.text;
+          onTextDelta?.(evt.delta.text);
+        } else if (evt.delta.type === "input_json_delta") {
+          block._rawJson = (block._rawJson || "") + evt.delta.partial_json;
+        }
+        break;
+      }
+      case "content_block_stop": {
+        const block = blocks[evt.index];
+        if (block && block._rawJson !== undefined) {
+          try {
+            block.input = block._rawJson ? JSON.parse(block._rawJson) : block.input || {};
+          } catch {
+            block.input = block.input || {};
+          }
+          delete block._rawJson;
+        }
+        break;
+      }
+      case "message_delta": {
+        if (evt.delta?.stop_reason) stopReason = evt.delta.stop_reason;
+        break;
+      }
+      case "error":
+        throw new Error(evt.error?.message || "Stream error");
+      default:
+        break;
+    }
+  }
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() || "";
+    for (const chunk of chunks) {
+      const dataLine = chunk
+        .split("\n")
+        .find((line) => line.startsWith("data:"));
+      if (!dataLine) continue;
+      try {
+        handleEvent(JSON.parse(dataLine.slice(5).trim()));
+      } catch (err) {
+        if (err instanceof SyntaxError) continue; // partial/malformed chunk, skip
+        throw err;
+      }
+    }
+  }
+
+  return { content: blocks.filter(Boolean), stop_reason: stopReason };
 }
 
 // messages: [{role:'user'|'assistant', content: string | array}]
 // toolCtx: passed straight through to executeTool - {uid, onProfileUpdated, onCalendarChanged, onStartTimer}
+// onTextUpdate: called with the growing reply text as it streams in, across
+// every tool-loop round (so any "let me check that" commentary before a
+// tool call shows up live too, not just the final answer)
 // Returns { messages: <updated full history>, replyText: <final assistant text> }
-export async function sendMessage({ messages, system, uid, toolCtx = {} }) {
+export async function sendMessage({ messages, system, uid, toolCtx = {}, onTextUpdate }) {
   let working = [...messages];
-  let replyText = "";
+  const segments = [];
 
   for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
-    const data = await callWorker({ system, messages: working, tools: TOOL_SCHEMAS });
+    segments.push("");
+    const data = await callWorkerStream(
+      { system, messages: working, tools: TOOL_SCHEMAS },
+      {
+        onTextDelta: (delta) => {
+          segments[segments.length - 1] += delta;
+          onTextUpdate?.(segments.filter(Boolean).join("\n\n"));
+        },
+      }
+    );
     const content = data.content || [];
     working = [...working, { role: "assistant", content }];
 
     const toolUses = content.filter((b) => b.type === "tool_use");
-    const textBlocks = content.filter((b) => b.type === "text");
-    replyText = textBlocks.map((b) => b.text).join("\n").trim() || replyText;
 
     // A long-running server-side web search can pause mid-turn; resend the
     // paused assistant message as-is (already appended to `working` above)
@@ -84,5 +167,6 @@ export async function sendMessage({ messages, system, uid, toolCtx = {} }) {
     working = [...working, { role: "user", content: toolResults }];
   }
 
+  const replyText = segments.filter(Boolean).join("\n\n").trim();
   return { messages: working, replyText };
 }
