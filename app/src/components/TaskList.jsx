@@ -197,7 +197,9 @@ function TaskRow({ task, onToggle, onDelete }) {
         {task.done && <IconCheck width={12} height={12} style={{ margin: 0 }} />}
       </button>
       <div className="task-drag-handle" {...attributes} {...listeners}>
-        <span className="task-title">{task.title}</span>
+        <span className="task-title" title={task.title}>
+          {task.title}
+        </span>
         {task.domain && <span className="badge">{task.domain}</span>}
       </div>
       <span className={`task-priority p${priority}`}>{priority}</span>
