@@ -12,6 +12,10 @@ import { IconAttach } from "./SmallIcons.jsx";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
+// The browser voice is too robotic on iPhone specifically (per user
+// feedback) - text-only replies there until a better voice is set up;
+// other platforms are unaffected.
+const IS_IPHONE = /iPhone/.test(navigator.userAgent);
 
 export default function ChatPanel({ ampRef, typeRef }) {
   const { user, profile, domains, setProfileLocal, bumpCalendarRefresh, bumpHealthRefresh, bumpTasksRefresh, startTimer } =
@@ -150,7 +154,7 @@ export default function ChatPanel({ ampRef, typeRef }) {
       historyRef.current = messages;
       const finalText = replyText || "(no reply)";
       setDisplayLog((log) => [...log, { role: "assistant", text: finalText }]);
-      if (viaVoice) speakReply(finalText);
+      if (viaVoice && !IS_IPHONE) speakReply(finalText);
     } catch (err) {
       setDisplayLog((log) => [...log, { role: "assistant", text: `Error: ${err.message}` }]);
     } finally {

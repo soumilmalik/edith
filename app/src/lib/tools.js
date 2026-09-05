@@ -191,8 +191,33 @@ export const TOOL_SCHEMAS = [
   },
   {
     name: "list_tasks",
-    description: "List all current tasks on the Task List panel, with their priority/domain/done state.",
+    description: "List all current tasks on the Task List panel, with their id/priority/domain/done state. Call this first to get a task's id before update_task or delete_task.",
     input_schema: { type: "object", properties: {} },
+  },
+  {
+    name: "update_task",
+    description:
+      "Edit an existing task on the Task List by its id (from list_tasks) - change its title, domain, priority, and/or mark it done. Use this whenever the user asks to change a task's priority, rename it, or check it off - never create a new task as a workaround for editing one that already exists.",
+    input_schema: {
+      type: "object",
+      properties: {
+        id: { type: "string" },
+        title: { type: "string" },
+        domain: { type: "string" },
+        priority: { type: "integer", description: "1 (lowest) to 5 (most urgent/important)" },
+        done: { type: "boolean" },
+      },
+      required: ["id"],
+    },
+  },
+  {
+    name: "delete_task",
+    description: "Delete a task from the Task List by its id (from list_tasks) - e.g. the user asks to remove a task, or an accidental duplicate needs cleaning up.",
+    input_schema: {
+      type: "object",
+      properties: { id: { type: "string" } },
+      required: ["id"],
+    },
   },
   {
     name: "play_alexa_music",
@@ -373,6 +398,25 @@ export async function executeTool(name, input, ctx) {
     }
     case "list_tasks": {
       return sortByOrder(await fb.listTasks(ctx.uid));
+    }
+    case "update_task": {
+      const { id, ...patch } = input;
+      if (patch.priority) {
+        // Re-slot it into the priority-sorted position too, same as a fresh
+        // add_task, so changing a task's priority actually moves it in the
+        // list instead of leaving it sitting wherever it was.
+        const existing = await fb.listTasks(ctx.uid);
+        const others = existing.filter((t) => t.id !== id);
+        patch.order = computeInsertOrder(others, patch.priority);
+      }
+      await fb.updateTask(ctx.uid, id, patch);
+      ctx.onTasksChanged?.();
+      return { updated: true, id, ...patch };
+    }
+    case "delete_task": {
+      await fb.deleteTask(ctx.uid, input.id);
+      ctx.onTasksChanged?.();
+      return { deleted: true, id: input.id };
     }
     case "play_alexa_music": {
       const url = import.meta.env.VITE_ALEXA_SHORTCUT_URL;
