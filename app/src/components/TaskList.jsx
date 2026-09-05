@@ -7,7 +7,7 @@ import { auth, listTasks, addTask, updateTask, deleteTask, rolloverTasksIfNewDay
 import { prioritizeTask } from "../lib/tasks.js";
 import { sortByOrder, computeInsertOrder, computeDragOrder } from "../lib/taskOrder.js";
 import { startScribeStream } from "../lib/scribeStream.js";
-import { IconMic, IconTrash, IconCheck } from "./SmallIcons.jsx";
+import { IconMic, IconTrash, IconCheck, IconRepeat } from "./SmallIcons.jsx";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
@@ -17,6 +17,7 @@ export default function TaskList() {
   const [tasks, setTasks] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [newTitle, setNewTitle] = useState("");
+  const [recurringDraft, setRecurringDraft] = useState(false);
   const [adding, setAdding] = useState(false);
   const [taskError, setTaskError] = useState("");
   const [listening, setListening] = useState(false);
@@ -59,9 +60,11 @@ export default function TaskList() {
         existingTasks: tasks.map((t) => ({ title: t.title, priority: t.priority })),
       });
       const order = computeInsertOrder(tasks, priority);
-      const id = await addTask(user.uid, { title, domain: domain || null, priority, order, done: false });
-      setTasks((ts) => sortByOrder([...ts, { id, title, domain, priority, order, done: false }]));
+      const recurring = recurringDraft;
+      const id = await addTask(user.uid, { title, domain: domain || null, priority, order, recurring, done: false });
+      setTasks((ts) => sortByOrder([...ts, { id, title, domain, priority, order, recurring, done: false }]));
       setNewTitle("");
+      setRecurringDraft(false);
     } catch (err) {
       setTaskError(err.message || "Couldn't add that task.");
     } finally {
@@ -78,6 +81,12 @@ export default function TaskList() {
   async function handleDelete(task) {
     setTasks((ts) => ts.filter((t) => t.id !== task.id));
     await deleteTask(user.uid, task.id);
+  }
+
+  async function toggleRecurring(task) {
+    const recurring = !task.recurring;
+    setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, recurring } : t)));
+    await updateTask(user.uid, task.id, { recurring });
   }
 
   function handleDragEnd(event) {
@@ -153,6 +162,14 @@ export default function TaskList() {
             <IconMic width={16} height={16} style={{ margin: 0 }} />
           </button>
         )}
+        <button
+          type="button"
+          className={`round-btn ${recurringDraft ? "task-check checked" : ""}`}
+          onClick={() => setRecurringDraft((v) => !v)}
+          title="Repeat daily - resets unchecked every midnight instead of disappearing once done"
+        >
+          <IconRepeat width={16} height={16} style={{ margin: 0 }} />
+        </button>
         <button type="submit" disabled={adding || !newTitle.trim()}>
           {adding ? "..." : "Add"}
         </button>
@@ -174,7 +191,13 @@ export default function TaskList() {
         <SortableContext items={tasks.map((t) => t.id)} strategy={verticalListSortingStrategy}>
           <div className="task-list">
             {tasks.map((task) => (
-              <TaskRow key={task.id} task={task} onToggle={toggleDone} onDelete={handleDelete} />
+              <TaskRow
+                key={task.id}
+                task={task}
+                onToggle={toggleDone}
+                onDelete={handleDelete}
+                onToggleRecurring={toggleRecurring}
+              />
             ))}
           </div>
         </SortableContext>
@@ -183,7 +206,7 @@ export default function TaskList() {
   );
 }
 
-function TaskRow({ task, onToggle, onDelete }) {
+function TaskRow({ task, onToggle, onDelete, onToggleRecurring }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -202,6 +225,14 @@ function TaskRow({ task, onToggle, onDelete }) {
         </span>
         {task.domain && <span className="badge">{task.domain}</span>}
       </div>
+      <button
+        type="button"
+        className={`task-repeat ${task.recurring ? "active" : ""}`}
+        title={task.recurring ? "Repeats daily - click to make it one-off" : "Make this a daily task"}
+        onClick={() => onToggleRecurring(task)}
+      >
+        <IconRepeat width={13} height={13} style={{ margin: 0 }} />
+      </button>
       <span className={`task-priority p${priority}`}>{priority}</span>
       <button type="button" className="task-delete" title="Delete task" onClick={() => onDelete(task)}>
         <IconTrash width={13} height={13} style={{ margin: 0 }} />

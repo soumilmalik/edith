@@ -177,7 +177,7 @@ export const TOOL_SCHEMAS = [
   {
     name: "add_task",
     description:
-      "Add a standalone task/goal (not tied to a specific calendar time) to the user's Task List panel, tagged with a domain and priority. The Task List is always sorted highest-priority first, so weigh the priority (1 lowest - 5 most urgent/important) against the user's other current tasks rather than defaulting to the middle - use list_tasks first if you need to see what's already there.",
+      "Add a standalone task/goal (not tied to a specific calendar time) to the user's Task List panel, tagged with a domain and priority. The Task List is always sorted highest-priority first, so weigh the priority (1 lowest - 5 most urgent/important) against the user's other current tasks rather than defaulting to the middle - use list_tasks first if you need to see what's already there. Set recurring:true whenever the user describes a daily habit rather than a one-off ('every day', 'daily', 'each morning', e.g. 'set a daily task for creatine') - a recurring task resets unchecked every midnight instead of disappearing once completed.",
     input_schema: {
       type: "object",
       properties: {
@@ -185,6 +185,7 @@ export const TOOL_SCHEMAS = [
         domain: { type: "string" },
         priority: { type: "integer", description: "1 (lowest) to 5 (most urgent/important)" },
         dueDate: { type: "string" },
+        recurring: { type: "boolean", description: "True for a daily-repeating task/habit" },
       },
       required: ["title", "domain"],
     },
@@ -197,7 +198,7 @@ export const TOOL_SCHEMAS = [
   {
     name: "update_task",
     description:
-      "Edit an existing task on the Task List by its id (from list_tasks) - change its title, domain, priority, and/or mark it done. Use this whenever the user asks to change a task's priority, rename it, or check it off - never create a new task as a workaround for editing one that already exists.",
+      "Edit an existing task on the Task List by its id (from list_tasks) - change its title, domain, priority, recurring status, and/or mark it done. Use this whenever the user asks to change a task's priority, rename it, check it off, or turn it into (or out of) a daily habit - never create a new task as a workaround for editing one that already exists.",
     input_schema: {
       type: "object",
       properties: {
@@ -206,6 +207,7 @@ export const TOOL_SCHEMAS = [
         domain: { type: "string" },
         priority: { type: "integer", description: "1 (lowest) to 5 (most urgent/important)" },
         done: { type: "boolean" },
+        recurring: { type: "boolean", description: "True for a daily-repeating task/habit" },
       },
       required: ["id"],
     },
@@ -391,6 +393,7 @@ export async function executeTool(name, input, ctx) {
         priority,
         order,
         dueDate: input.dueDate || null,
+        recurring: !!input.recurring,
         done: false,
       });
       ctx.onTasksChanged?.();

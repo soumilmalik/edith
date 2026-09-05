@@ -71,6 +71,17 @@ export function IconTrash(props) {
   );
 }
 
+export function IconRepeat(props) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M17 2.5l3.5 3.5L17 9.5" />
+      <path d="M20.5 6H8a5 5 0 0 0-5 5v1" />
+      <path d="M7 21.5L3.5 18 7 14.5" />
+      <path d="M3.5 18H16a5 5 0 0 0 5-5v-1" />
+    </svg>
+  );
+}
+
 export function IconMic(props) {
   return (
     <svg {...base} strokeWidth={1.8} {...props}>

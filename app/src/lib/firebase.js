@@ -141,9 +141,12 @@ export async function deleteTask(uid, taskId) {
   await deleteDoc(doc(db, "users", uid, "tasks", taskId));
 }
 
-// Once per local day (tracked in a small meta doc, not per-task), clears out
-// completed tasks so the list starts the day fresh - unticked tasks are
-// simply never touched, which is what "carries them forward" to the next day.
+// Once per local day (tracked in a small meta doc, not per-task): completed
+// one-off tasks get cleared out so the list starts the day fresh (unticked
+// ones are simply never touched, which is what "carries them forward");
+// completed recurring tasks are reset back to unchecked instead of deleted,
+// so a daily habit like "Creatine" reappears unticked every day rather than
+// vanishing once it's done.
 export async function rolloverTasksIfNewDay(uid) {
   const today = todayKey();
   const metaRef = doc(db, "users", uid, "meta", "taskRollover");
@@ -151,7 +154,9 @@ export async function rolloverTasksIfNewDay(uid) {
   if (metaSnap.exists() && metaSnap.data().date === today) return;
 
   const doneSnap = await getDocs(query(collection(db, "users", uid, "tasks"), where("done", "==", true)));
-  await Promise.all(doneSnap.docs.map((d) => deleteDoc(d.ref)));
+  await Promise.all(
+    doneSnap.docs.map((d) => (d.data().recurring ? updateDoc(d.ref, { done: false }) : deleteDoc(d.ref)))
+  );
   await setDoc(metaRef, { date: today }, { merge: true });
 }
 
