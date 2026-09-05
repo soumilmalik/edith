@@ -32,7 +32,13 @@ export default function MobileLayout() {
         <Clock compact />
 
         <div className="mobile-content">
-          {tab === "chat" && <ChatPanel ampRef={ampRef} compact />}
+          {/* Always mounted (shown/hidden via CSS) rather than conditionally
+              rendered like the other tabs - ChatPanel's conversation only
+              lives in local component state, not Firestore, so unmounting
+              it on every tab switch was wiping the whole chat history. */}
+          <div className={`mobile-chat-wrap ${tab === "chat" ? "" : "mobile-tab-hidden"}`}>
+            <ChatPanel ampRef={ampRef} compact />
+          </div>
           {tab === "tasks" && <TaskList />}
           {tab === "calendar" && (
             <>

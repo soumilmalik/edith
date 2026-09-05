@@ -2,12 +2,13 @@ import React from "react";
 import { IconMic } from "./SmallIcons.jsx";
 
 // A single icon button - normally compact, sitting inline in the chat input
-// row, but also used at a large size for the mobile "voice-first" home view
-// (size="lg"). State (listening/speaking) reads through the glow/pulse
-// alone, so it doesn't need a text label to stay legible.
+// row, but also used at a larger size on mobile (size="lg"), in its own row
+// just above the input rather than replacing the log/input row entirely.
+// State (listening/speaking) reads through the glow/pulse alone, so it
+// doesn't need a text label to stay legible.
 export default function VoiceControls({ listening, speaking, onToggleMic, supported, size = "md" }) {
   const large = size === "lg";
-  const iconSize = large ? 46 : 20;
+  const iconSize = large ? 32 : 20;
   return (
     <button
       type="button"
@@ -18,7 +19,7 @@ export default function VoiceControls({ listening, speaking, onToggleMic, suppor
     >
       {listening ? (
         <span
-          style={{ width: large ? 22 : 10, height: large ? 22 : 10, borderRadius: "50%", background: "currentColor" }}
+          style={{ width: large ? 16 : 10, height: large ? 16 : 10, borderRadius: "50%", background: "currentColor" }}
         />
       ) : (
         <IconMic width={iconSize} height={iconSize} style={{ margin: 0 }} />
