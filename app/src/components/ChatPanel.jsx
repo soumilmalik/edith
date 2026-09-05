@@ -9,6 +9,7 @@ import { auth } from "../lib/firebase.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
 import VoiceControls from "./VoiceControls.jsx";
 import { IconAttach } from "./SmallIcons.jsx";
+import { ChatIcon } from "./Icons.jsx";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
@@ -17,9 +18,14 @@ const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in w
 // other platforms are unaffected.
 const IS_IPHONE = /iPhone/.test(navigator.userAgent);
 
-export default function ChatPanel({ ampRef, typeRef }) {
+export default function ChatPanel({ ampRef, typeRef, compact = false }) {
   const { user, profile, domains, setProfileLocal, bumpCalendarRefresh, bumpHealthRefresh, bumpTasksRefresh, startTimer } =
     useAppState();
+  // compact: mobile's "voice-first" home view (one big mic button) instead
+  // of the full log + input row - expands automatically the moment there's
+  // something to actually show (a message sent, a reply streaming in), or
+  // manually via the small chat-icon button.
+  const [expanded, setExpanded] = useState(!compact);
   const isNewProfile = !profile.bio && !profile.decadeGoals && !profile.yearGoals;
   const [displayLog, setDisplayLog] = useState([
     {
@@ -57,6 +63,10 @@ export default function ChatPanel({ ampRef, typeRef }) {
   useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [displayLog, liveTranscript, streamingText]);
+
+  useEffect(() => {
+    if (compact && (listening || sending)) setExpanded(true);
+  }, [compact, listening, sending]);
 
   async function attachFile(file) {
     setAttachError("");
@@ -225,6 +235,12 @@ export default function ChatPanel({ ampRef, typeRef }) {
     committedRef.current = "";
     partialRef.current = "";
     setLiveTranscript("");
+    // Optimistic: show "listening" the instant the button is tapped rather
+    // than waiting for onOpen (token fetch + mic permission + WebSocket
+    // handshake all have to complete first) - that round-trip is what read
+    // as a laggy, non-instant mic button. The actual capture catches up a
+    // beat later; if setup ultimately fails, the catch block below reverts it.
+    setListening(true);
 
     try {
       const idToken = await auth.currentUser?.getIdToken();
@@ -232,7 +248,6 @@ export default function ChatPanel({ ampRef, typeRef }) {
         workerUrl: WORKER_URL,
         idToken,
         ampRef,
-        onOpen: () => setListening(true),
         onPartial: (text) => {
           partialRef.current = text;
           setLiveTranscript(`${committedRef.current} ${partialRef.current}`.trim());
@@ -242,7 +257,15 @@ export default function ChatPanel({ ampRef, typeRef }) {
           partialRef.current = "";
           setLiveTranscript(committedRef.current);
         },
-        onError: () => setMicError("Voice input hit an error - check your connection and try again."),
+        onError: () => {
+          // A spurious error/close race from the STT socket tearing down
+          // right after a successful commit is common (especially on mobile
+          // networks) and harmless - the transcript already came through.
+          // Only surface it if nothing was actually captured.
+          if (!committedRef.current.trim()) {
+            setMicError("Voice input hit an error - check your connection and try again.");
+          }
+        },
         onClose: () => {
           setListening(false);
           scribeRef.current = null;
@@ -258,9 +281,38 @@ export default function ChatPanel({ ampRef, typeRef }) {
     }
   }
 
+  const showCompactHome = compact && !expanded;
+  let compactStatus = "Tap to talk to Edith";
+  if (listening) compactStatus = liveTranscript || "Listening...";
+  else if (sending) compactStatus = streamingText || "Thinking...";
+  else if (micError) compactStatus = micError;
+
   return (
     <div className="panel chat-panel">
-      <div className="section-title">Edith</div>
+      <div className="section-title" style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span>Edith</span>
+        {compact && (
+          <button
+            type="button"
+            className="round-btn"
+            style={{ width: 26, height: 26, minWidth: 26 }}
+            onClick={() => setExpanded((v) => !v)}
+            title={expanded ? "Back to voice view" : "Open chat"}
+          >
+            <ChatIcon width={13} height={13} style={{ margin: 0 }} />
+          </button>
+        )}
+      </div>
+
+      {showCompactHome ? (
+        <div className="chat-compact-home">
+          <VoiceControls listening={listening} speaking={speaking} onToggleMic={toggleMic} supported={MIC_SUPPORTED} size="lg" />
+          <div className="small chat-compact-status" style={micError ? { color: "var(--danger)" } : undefined}>
+            {compactStatus}
+          </div>
+        </div>
+      ) : (
+        <>
       <div className="chat-log">
         {displayLog.map((m, i) => (
           <div key={i} className={`chat-msg ${m.role}`}>
@@ -353,6 +405,8 @@ export default function ChatPanel({ ampRef, typeRef }) {
           Send
         </button>
       </form>
+        </>
+      )}
     </div>
   );
 }

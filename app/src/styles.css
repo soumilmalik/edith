@@ -476,6 +476,32 @@ input[type="file"]::file-selector-button:hover {
   box-shadow: 0 0 14px rgba(var(--edith-glow-rgb), 0.65);
 }
 
+.mic-btn-lg {
+  width: clamp(110px, 32vw, 150px);
+  height: clamp(110px, 32vw, 150px);
+  min-width: 0;
+}
+
+/* Mobile "voice-first" home view for the Edith tab: one big mic button
+   instead of the full chat log + input row, which read as too much screen
+   real estate for something that's mostly used by voice. */
+.chat-compact-home {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  min-height: 220px;
+  text-align: center;
+  padding: 12px;
+}
+
+.chat-compact-status {
+  max-width: 90%;
+  min-height: 1.2em;
+}
+
 @keyframes pulse {
   0%,
   100% {

@@ -32,7 +32,7 @@ export default function MobileLayout() {
         <Clock compact />
 
         <div className="mobile-content">
-          {tab === "chat" && <ChatPanel ampRef={ampRef} />}
+          {tab === "chat" && <ChatPanel ampRef={ampRef} compact />}
           {tab === "tasks" && <TaskList />}
           {tab === "calendar" && (
             <>

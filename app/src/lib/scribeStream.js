@@ -41,16 +41,20 @@ export async function startScribeStream({
   onError,
   onClose,
 }) {
-  const tokenRes = await fetch(`${workerUrl}/api/stt/token`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${idToken}` },
-  });
+  // Minting the token and requesting the mic are independent - running them
+  // in parallel (instead of one after the other) roughly halves this setup
+  // latency, which is most of what made the mic feel laggy to start.
+  const [tokenRes, stream] = await Promise.all([
+    fetch(`${workerUrl}/api/stt/token`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${idToken}` },
+    }),
+    navigator.mediaDevices.getUserMedia({ audio: true }),
+  ]);
   if (!tokenRes.ok) throw new Error(await tokenRes.text());
   const tokenData = await tokenRes.json();
   const token = tokenData.token || tokenData.value || tokenData.single_use_token;
   if (!token) throw new Error("No single-use token returned");
-
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
   const ws = new WebSocket(
     `wss://api.elevenlabs.io/v1/speech-to-text/realtime?token=${encodeURIComponent(token)}&model_id=scribe_v2_realtime`
