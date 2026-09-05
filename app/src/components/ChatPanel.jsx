@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { useAppState } from "../state/appState.js";
 import { sendMessage, buildSystemPrompt } from "../lib/claudeClient.js";
-import { speakNeural, speakBrowser, primeVoices, unlockAudio } from "../lib/speech.js";
+import { speakNeural, speakBrowser, primeVoices, unlockAudio, unlockSpeechSynthesis } from "../lib/speech.js";
 import { showDebugError } from "../lib/debugBanner.js";
 import { startScribeStream } from "../lib/scribeStream.js";
 import { auth } from "../lib/firebase.js";
@@ -211,8 +211,11 @@ export default function ChatPanel({ ampRef, typeRef }) {
     // Must run synchronously inside this click handler (before any await) so
     // it still carries the tap's user-activation - this is what lets the TTS
     // reply play later, after the async round-trip to Claude, without iOS
-    // Safari's autoplay policy silently blocking it.
+    // Safari's autoplay policy silently blocking it. Covers both the neural
+    // voice (AudioContext) and the browser-voice fallback (SpeechSynthesis) -
+    // two separate APIs, each needing their own unlock.
     unlockAudio();
+    unlockSpeechSynthesis();
 
     setMicError("");
     committedRef.current = "";

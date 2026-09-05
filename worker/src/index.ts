@@ -10,6 +10,7 @@ export interface Env {
   GOOGLE_CLIENT_SECRET: string;
   ELEVENLABS_API_KEY: string;
   ELEVENLABS_VOICE_ID: string;
+  GOOGLE_TTS_API_KEY: string;
   APPLE_ID_EMAIL: string;
   APPLE_APP_PASSWORD: string;
 }
@@ -392,34 +393,48 @@ async function handleCalendarRefresh(request: Request, env: Env): Promise<Respon
 
 // Synthesizes speech via ElevenLabs and streams the raw MP3 bytes straight
 // back to the frontend (no base64 round-trip needed).
+// Google Cloud TTS voice for Edith's spoken replies - free-tier ElevenLabs
+// can't use its neural voices via the API at all (confirmed via repeated
+// paid_plan_required errors), so this replaced it entirely. A plain
+// restricted API key works fine here; no service-account/OAuth needed.
+// en-GB-Neural2-A: calm British female, the closest fit to a JARVIS/EDITH
+// register. Swapping voices later is just changing this one string.
+const TTS_VOICE = { languageCode: "en-GB", name: "en-GB-Neural2-A" };
+
 async function handleTts(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as { text?: string };
   const text = (body.text || "").slice(0, 5000);
   if (!text.trim()) return json({ error: "text is required" }, env, 400);
 
-  const res = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${env.ELEVENLABS_VOICE_ID}`, {
+  const res = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "xi-api-key": env.ELEVENLABS_API_KEY,
-      Accept: "audio/mpeg",
+      "x-goog-api-key": env.GOOGLE_TTS_API_KEY,
     },
     body: JSON.stringify({
-      text,
-      // Flash v2.5: 0.5 credits/char (half the cost of the default model),
-      // and ElevenLabs' lowest-latency option - the right tradeoff for a
-      // real-time assistant on a free-tier credit budget.
-      model_id: "eleven_flash_v2_5",
-      voice_settings: { stability: 0.5, similarity_boost: 0.75 },
+      input: { text },
+      voice: TTS_VOICE,
+      audioConfig: { audioEncoding: "MP3" },
     }),
   });
 
   if (!res.ok) {
     const errText = await res.text();
-    return json({ error: "ElevenLabs TTS failed", detail: errText }, env, res.status);
+    return json({ error: "Google TTS failed", detail: errText }, env, res.status);
   }
 
-  return new Response(res.body, {
+  const data = (await res.json()) as { audioContent?: string };
+  if (!data.audioContent) return json({ error: "Google TTS returned no audio" }, env, 502);
+
+  // Google returns base64-encoded audio in a JSON body (unlike ElevenLabs'
+  // raw MP3 stream) - decode it here so the frontend's contract with
+  // /api/tts (a raw audio/mpeg response) doesn't have to change at all.
+  const binary = atob(data.audioContent);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+  return new Response(bytes, {
     status: 200,
     headers: { "Content-Type": "audio/mpeg", ...corsHeaders(env) },
   });

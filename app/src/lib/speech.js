@@ -61,6 +61,20 @@ export function unlockAudio() {
   if (ctx.state === "suspended") ctx.resume().catch(() => {});
 }
 
+// iOS Safari also requires speechSynthesis.speak() to be triggered from
+// inside a real user gesture at least once per page load - otherwise later
+// async calls (the browser-voice fallback fires after a mic-transcription +
+// Claude round trip, well outside any tap) get silently swallowed, no error.
+// Call this synchronously alongside unlockAudio() in the same tap handler.
+let speechUnlocked = false;
+export function unlockSpeechSynthesis() {
+  if (speechUnlocked || !window.speechSynthesis) return;
+  speechUnlocked = true;
+  const utterance = new SpeechSynthesisUtterance(" ");
+  utterance.volume = 0;
+  window.speechSynthesis.speak(utterance);
+}
+
 export function stopSpeaking() {
   window.speechSynthesis?.cancel();
   if (currentAudio) {

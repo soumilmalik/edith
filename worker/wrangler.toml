@@ -19,4 +19,5 @@ APPLE_ID_EMAIL = "a999malik@gmail.com"
 #   wrangler secret put GOOGLE_CLIENT_SECRET
 #   wrangler secret put ELEVENLABS_API_KEY
 #   wrangler secret put ELEVENLABS_VOICE_ID
+#   wrangler secret put GOOGLE_TTS_API_KEY
 #   wrangler secret put APPLE_APP_PASSWORD
