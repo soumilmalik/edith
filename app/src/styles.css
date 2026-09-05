@@ -498,6 +498,8 @@ input[type="file"]::file-selector-button:hover {
 }
 
 .login-screen {
+  position: relative;
+  z-index: 1;
   width: 100%;
   height: 100%;
   display: flex;
@@ -506,10 +508,44 @@ input[type="file"]::file-selector-button:hover {
   justify-content: center;
   gap: 20px;
   text-align: center;
+  padding: 24px;
 }
 
 .login-title {
-  font-size: 2.6rem;
+  font-size: clamp(2.8rem, 9vw, 4.2rem);
+  letter-spacing: 0.14em;
+}
+
+.login-tagline {
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+/* Staggered fade+rise entrance, borrowed from the "hero reveal" motion
+   language of a landing-page template the user liked - applied here (the
+   login screen) rather than site-wide, since that's the one moment in the
+   app that's actually a single first-impression view rather than a working
+   dashboard full of panels that need to just be visible/usable. */
+.login-reveal {
+  opacity: 0;
+  transform: translateY(18px);
+  animation: login-reveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--d, 0s);
+}
+
+@keyframes login-reveal {
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-reveal {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .small {

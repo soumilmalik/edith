@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { signInWithGoogleIdToken, signOutUser } from "../lib/firebase.js";
 import { useAppState } from "../state/appState.js";
+import Orb3D from "./Orb3D.jsx";
 
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 
@@ -8,6 +9,7 @@ export default function Login() {
   const { user, authorized } = useAppState();
   const [error, setError] = useState("");
   const buttonRef = useRef(null);
+  const ampRef = useRef(0);
 
   const notAuthorized = user && !authorized;
 
@@ -54,25 +56,38 @@ export default function Login() {
   }, [notAuthorized]);
 
   return (
-    <div className="login-screen">
-      <div className="login-title glow-text">EDITH</div>
-      {notAuthorized ? (
-        <>
-          <p>This instance is locked to a single account.</p>
-          <p className="small">Signed in as {user.email} - not authorized.</p>
-          <button onClick={signOutUser}>Sign out</button>
-        </>
-      ) : (
-        <>
-          <p className="small">Personal life management system</p>
-          <div ref={buttonRef} />
-          {error && (
-            <p className="small" style={{ color: "var(--danger)", maxWidth: 320 }}>
-              {error}
+    <div className="app-shell">
+      <Orb3D ampRef={ampRef} />
+      <div className="login-screen">
+        <div className="login-title glow-text login-reveal" style={{ "--d": "0.05s" }}>
+          EDITH
+        </div>
+        {notAuthorized ? (
+          <>
+            <p className="login-reveal" style={{ "--d": "0.2s" }}>
+              This instance is locked to a single account.
             </p>
-          )}
-        </>
-      )}
+            <p className="small login-reveal" style={{ "--d": "0.3s" }}>
+              Signed in as {user.email} - not authorized.
+            </p>
+            <button className="login-reveal" style={{ "--d": "0.4s" }} onClick={signOutUser}>
+              Sign out
+            </button>
+          </>
+        ) : (
+          <>
+            <p className="small login-tagline login-reveal" style={{ "--d": "0.2s" }}>
+              Personal life management system
+            </p>
+            <div ref={buttonRef} className="login-reveal" style={{ "--d": "0.35s" }} />
+            {error && (
+              <p className="small login-reveal" style={{ "--d": "0.35s", color: "var(--danger)", maxWidth: 320 }}>
+                {error}
+              </p>
+            )}
+          </>
+        )}
+      </div>
     </div>
   );
 }
