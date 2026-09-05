@@ -3,7 +3,15 @@ import { DndContext, closestCenter, PointerSensor, TouchSensor, useSensor, useSe
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { useAppState } from "../state/appState.js";
-import { auth, listTasks, addTask, updateTask, deleteTask, rolloverTasksIfNewDay } from "../lib/firebase.js";
+import {
+  auth,
+  listTasks,
+  addTask,
+  updateTask,
+  deleteTask,
+  rolloverTasksIfNewDay,
+  applyTaskHealthEffect,
+} from "../lib/firebase.js";
 import { prioritizeTask } from "../lib/tasks.js";
 import { sortByOrder, computeInsertOrder, computeDragOrder } from "../lib/taskOrder.js";
 import { startScribeStream } from "../lib/scribeStream.js";
@@ -13,7 +21,7 @@ const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
 
 export default function TaskList() {
-  const { user, domains, tasksVersion } = useAppState();
+  const { user, domains, tasksVersion, bumpHealthRefresh } = useAppState();
   const [tasks, setTasks] = useState([]);
   const [loaded, setLoaded] = useState(false);
   const [newTitle, setNewTitle] = useState("");
@@ -76,6 +84,10 @@ export default function TaskList() {
     const done = !task.done;
     setTasks((ts) => ts.map((t) => (t.id === task.id ? { ...t, done } : t)));
     await updateTask(user.uid, task.id, { done });
+    if (task.healthEffect) {
+      await applyTaskHealthEffect(user.uid, task, done);
+      bumpHealthRefresh();
+    }
   }
 
   async function handleDelete(task) {

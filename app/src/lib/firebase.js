@@ -126,6 +126,29 @@ export async function updateTask(uid, taskId, patch) {
   await updateDoc(doc(db, "users", uid, "tasks", taskId), patch);
 }
 
+export async function getTask(uid, taskId) {
+  const snap = await getDoc(doc(db, "users", uid, "tasks", taskId));
+  return snap.exists() ? { id: taskId, ...snap.data() } : null;
+}
+
+// A task can carry an optional healthEffect ({waterMl, calories, proteinG}) -
+// checking it off applies that delta to today's health log automatically
+// (e.g. a daily "Creatine" task that also logs 250ml of water); unchecking
+// reverses it, so an accidental double-toggle doesn't double-count. Call
+// this with the task's state from BEFORE the done change, and the new value.
+export async function applyTaskHealthEffect(uid, task, newDone) {
+  if (!task?.healthEffect || newDone === task.done) return;
+  const sign = newDone ? 1 : -1;
+  const eff = task.healthEffect;
+  const dateKey = todayKey();
+  const current = await getHealthLog(uid, dateKey);
+  await saveHealthLog(uid, dateKey, {
+    water: (current.water || 0) + (eff.waterMl || 0) * sign,
+    calories: (current.calories || 0) + (eff.calories || 0) * sign,
+    proteinG: (current.proteinG || 0) + (eff.proteinG || 0) * sign,
+  });
+}
+
 // Google Calendar refresh token, so the app can silently reconnect on future
 // visits without a popup. Lives only in this user's own protected doc.
 export async function getGoogleRefreshToken(uid) {

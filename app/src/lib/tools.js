@@ -177,7 +177,7 @@ export const TOOL_SCHEMAS = [
   {
     name: "add_task",
     description:
-      "Add a standalone task/goal (not tied to a specific calendar time) to the user's Task List panel, tagged with a domain and priority. The Task List is always sorted highest-priority first, so weigh the priority (1 lowest - 5 most urgent/important) against the user's other current tasks rather than defaulting to the middle - use list_tasks first if you need to see what's already there. Set recurring:true whenever the user describes a daily habit rather than a one-off ('every day', 'daily', 'each morning', e.g. 'set a daily task for creatine') - a recurring task resets unchecked every midnight instead of disappearing once completed.",
+      "Add a standalone task/goal (not tied to a specific calendar time) to the user's Task List panel, tagged with a domain and priority. The Task List is always sorted highest-priority first, so weigh the priority (1 lowest - 5 most urgent/important) against the user's other current tasks rather than defaulting to the middle - use list_tasks first if you need to see what's already there. Set recurring:true whenever the user describes a daily habit rather than a one-off ('every day', 'daily', 'each morning', e.g. 'set a daily task for creatine') - a recurring task resets unchecked every midnight instead of disappearing once completed. If the user wants checking this task off to also log something to their health tracker (e.g. 'whenever I check creatine, log 250ml of water'), set healthEffect - the app applies it automatically the moment the box is ticked (in the chat or the panel), and reverses it if unticked, no need to log it yourself in the moment.",
     input_schema: {
       type: "object",
       properties: {
@@ -186,6 +186,15 @@ export const TOOL_SCHEMAS = [
         priority: { type: "integer", description: "1 (lowest) to 5 (most urgent/important)" },
         dueDate: { type: "string" },
         recurring: { type: "boolean", description: "True for a daily-repeating task/habit" },
+        healthEffect: {
+          type: "object",
+          description: "Auto-applied to today's health log when this task is checked off (reversed if unchecked). Estimate values using general nutrition knowledge if the user names a food/supplement rather than giving exact numbers.",
+          properties: {
+            waterMl: { type: "integer" },
+            calories: { type: "integer" },
+            proteinG: { type: "integer" },
+          },
+        },
       },
       required: ["title", "domain"],
     },
@@ -198,7 +207,7 @@ export const TOOL_SCHEMAS = [
   {
     name: "update_task",
     description:
-      "Edit an existing task on the Task List by its id (from list_tasks) - change its title, domain, priority, recurring status, and/or mark it done. Use this whenever the user asks to change a task's priority, rename it, check it off, or turn it into (or out of) a daily habit - never create a new task as a workaround for editing one that already exists.",
+      "Edit an existing task on the Task List by its id (from list_tasks) - change its title, domain, priority, recurring status, health effect, and/or mark it done. Use this whenever the user asks to change a task's priority, rename it, check it off, turn it into (or out of) a daily habit, or attach/change an automatic health-log effect - never create a new task as a workaround for editing one that already exists. Setting done:true/false here applies (or reverses) the task's healthEffect automatically if it has one, same as ticking the checkbox in the panel.",
     input_schema: {
       type: "object",
       properties: {
@@ -208,6 +217,15 @@ export const TOOL_SCHEMAS = [
         priority: { type: "integer", description: "1 (lowest) to 5 (most urgent/important)" },
         done: { type: "boolean" },
         recurring: { type: "boolean", description: "True for a daily-repeating task/habit" },
+        healthEffect: {
+          type: "object",
+          description: "Auto-applied to today's health log when this task is checked off (reversed if unchecked).",
+          properties: {
+            waterMl: { type: "integer" },
+            calories: { type: "integer" },
+            proteinG: { type: "integer" },
+          },
+        },
       },
       required: ["id"],
     },
@@ -394,6 +412,7 @@ export async function executeTool(name, input, ctx) {
         order,
         dueDate: input.dueDate || null,
         recurring: !!input.recurring,
+        healthEffect: input.healthEffect || null,
         done: false,
       });
       ctx.onTasksChanged?.();
@@ -411,6 +430,13 @@ export async function executeTool(name, input, ctx) {
         const existing = await fb.listTasks(ctx.uid);
         const others = existing.filter((t) => t.id !== id);
         patch.order = computeInsertOrder(others, patch.priority);
+      }
+      if (patch.done !== undefined) {
+        const current = await fb.getTask(ctx.uid, id);
+        if (current) {
+          await fb.applyTaskHealthEffect(ctx.uid, current, patch.done);
+          if (current.healthEffect) ctx.onHealthChanged?.();
+        }
       }
       await fb.updateTask(ctx.uid, id, patch);
       ctx.onTasksChanged?.();
