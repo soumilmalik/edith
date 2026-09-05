@@ -405,6 +405,13 @@ async function handleTts(request: Request, env: Env): Promise<Response> {
   const body = (await request.json()) as { text?: string };
   const text = (body.text || "").slice(0, 5000);
   if (!text.trim()) return json({ error: "text is required" }, env, 400);
+  if (!env.GOOGLE_TTS_API_KEY) {
+    // Recognizable code (not just any error) so the client can quietly fall
+    // back to the browser voice instead of alarming the user with a debug
+    // banner for a known, expected state - same treatment ElevenLabs'
+    // paid_plan_required error got before this switched providers.
+    return json({ error: "google_tts_not_configured", message: "Google TTS API key isn't set yet" }, env, 501);
+  }
 
   const res = await fetch("https://texttospeech.googleapis.com/v1/text:synthesize", {
     method: "POST",
