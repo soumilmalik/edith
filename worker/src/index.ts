@@ -11,6 +11,7 @@ export interface Env {
   ELEVENLABS_API_KEY: string;
   ELEVENLABS_VOICE_ID: string;
   GOOGLE_TTS_API_KEY: string;
+  EXPERT_MODEL?: string;
   APPLE_ID_EMAIL: string;
   APPLE_APP_PASSWORD: string;
 }
@@ -93,8 +94,41 @@ async function requireAuthorizedUser(request: Request, env: Env): Promise<Respon
 // they hit context), which keeps those token costs down too.
 const WEB_SEARCH_TOOL = { type: "web_search_20260209", name: "web_search", max_uses: 3 };
 
+// Hard problems (homework/exam questions) go to a stronger model with its own
+// thinking enabled - slower and pricier per token than the everyday model
+// (Opus 5.5 is $4/$20 per MTok vs Sonnet 5's $2/$10), so the client only uses
+// it for the explicit solve_with_expert tool. Override with the EXPERT_MODEL var.
+const DEFAULT_EXPERT_MODEL = "claude-opus-5-5";
+
+async function handleExpert(body: { system?: string; messages?: unknown[] }, env: Env): Promise<Response> {
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-api-key": env.ANTHROPIC_API_KEY,
+      "anthropic-version": ANTHROPIC_VERSION,
+    },
+    body: JSON.stringify({
+      model: env.EXPERT_MODEL || DEFAULT_EXPERT_MODEL,
+      max_tokens: 16000,
+      system: body.system || "",
+      messages: body.messages || [],
+      stream: true,
+    }),
+  });
+  if (!res.ok || !res.body) {
+    const data = await res.json();
+    return json(data, env, res.status);
+  }
+  return new Response(res.body, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream", ...corsHeaders(env) },
+  });
+}
+
 async function handleChat(request: Request, env: Env): Promise<Response> {
-  const body = (await request.json()) as { system?: string; messages?: unknown[]; tools?: unknown[] };
+  const body = (await request.json()) as { system?: string; messages?: unknown[]; tools?: unknown[]; expert?: boolean };
+  if (body.expert) return handleExpert(body, env);
 
   // The system prompt and tool schemas are identical on every single request
   // in a conversation (system only changes if the user edits their profile;

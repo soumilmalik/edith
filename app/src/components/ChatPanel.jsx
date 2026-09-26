@@ -1,5 +1,8 @@
 import React, { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkMath from "remark-math";
+import rehypeKatex from "rehype-katex";
+import "katex/dist/katex.min.css";
 import { useAppState } from "../state/appState.js";
 import { sendMessage, buildSystemPrompt } from "../lib/claudeClient.js";
 import { speakNeural, speakBrowser, primeVoices, unlockAudio, unlockSpeechSynthesis } from "../lib/speech.js";
@@ -7,6 +10,7 @@ import { showDebugError } from "../lib/debugBanner.js";
 import { startScribeStream } from "../lib/scribeStream.js";
 import { auth } from "../lib/firebase.js";
 import { fileToBase64 } from "../lib/fileToBase64.js";
+import { refreshPcStatus, pcAvailable } from "../lib/pcAgent.js";
 import VoiceControls from "./VoiceControls.jsx";
 import { IconAttach } from "./SmallIcons.jsx";
 
@@ -16,6 +20,23 @@ const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in w
 // feedback) - text-only replies there until a better voice is set up;
 // other platforms are unaffected.
 const IS_IPHONE = /iPhone/.test(navigator.userAgent);
+
+// Chat markdown: LaTeX math ($...$, $$...$$) rendered with KaTeX, and links
+// (e.g. a showtimes page) open in a new tab.
+const MD_COMPONENTS = {
+  a: ({ href, children }) => (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  ),
+};
+function Md({ children }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkMath]} rehypePlugins={[rehypeKatex]} components={MD_COMPONENTS}>
+      {children}
+    </ReactMarkdown>
+  );
+}
 
 export default function ChatPanel({ ampRef, typeRef, compact = false }) {
   const { user, profile, domains, setProfileLocal, bumpCalendarRefresh, bumpHealthRefresh, bumpTasksRefresh, startTimer } =
@@ -31,6 +52,7 @@ export default function ChatPanel({ ampRef, typeRef, compact = false }) {
   ]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
+  const [statusText, setStatusText] = useState(""); // "Finding your file..." etc. while a tool runs
   const [streamingText, setStreamingText] = useState(""); // grows live as the reply streams in; "" while still waiting on the first token
   const [listening, setListening] = useState(false);
   const [speaking, setSpeaking] = useState(false);
@@ -137,7 +159,8 @@ export default function ChatPanel({ ampRef, typeRef, compact = false }) {
     setAttachment(null);
 
     try {
-      const system = buildSystemPrompt({ profile, domains });
+      await refreshPcStatus();
+      const system = buildSystemPrompt({ profile, domains, pc: pcAvailable() });
       const { messages, replyText } = await sendMessage({
         messages: historyRef.current,
         system,
@@ -148,8 +171,14 @@ export default function ChatPanel({ ampRef, typeRef, compact = false }) {
           onHealthChanged: bumpHealthRefresh,
           onTasksChanged: bumpTasksRefresh,
           onStartTimer: startTimer,
+          onProgress: setStreamingText,
+          onDisplay: (markdown) => {
+            setDisplayLog((log) => [...log, { role: "assistant", text: markdown }]);
+            setStreamingText("");
+          },
         },
         onTextUpdate: setStreamingText,
+        onStatus: setStatusText,
       });
       historyRef.current = messages;
       const finalText = replyText || "(no reply)";
@@ -160,6 +189,7 @@ export default function ChatPanel({ ampRef, typeRef, compact = false }) {
     } finally {
       setSending(false);
       setStreamingText("");
+      setStatusText("");
     }
   }
 
@@ -281,7 +311,7 @@ export default function ChatPanel({ ampRef, typeRef, compact = false }) {
             {m.attachmentName && <div className="badge">{m.attachmentName}</div>}
             {m.role === "assistant" ? (
               <div className="chat-markdown">
-                <ReactMarkdown>{m.text}</ReactMarkdown>
+                <Md>{m.text}</Md>
               </div>
             ) : (
               m.text
@@ -292,11 +322,12 @@ export default function ChatPanel({ ampRef, typeRef, compact = false }) {
           <div className="chat-msg assistant streaming">
             {streamingText ? (
               <div className="chat-markdown">
-                <ReactMarkdown>{streamingText}</ReactMarkdown>
+                <Md>{streamingText}</Md>
               </div>
             ) : (
-              "Thinking..."
+              statusText || "Thinking..."
             )}
+            {streamingText && statusText && <div className="small">{statusText}</div>}
           </div>
         )}
         {listening && (

@@ -3,6 +3,9 @@ import * as fb from "./firebase.js";
 import { pushAppleReminder } from "./appleReminders.js";
 import { todayKey } from "./dateKey.js";
 import { computeInsertOrder, sortByOrder } from "./taskOrder.js";
+import { PC_TOOL_SCHEMAS, executePcTool } from "./pcTools.js";
+import { EXPERT_TOOL_SCHEMA, executeExpertTool } from "./expert.js";
+import { pcAvailable } from "./pcAgent.js";
 
 // Claude tool schemas. Kept small and explicit so Claude always reasons
 // about conflicts/domains through the model, not hidden app logic.
@@ -294,10 +297,19 @@ function groupOverlapping(events) {
   return groups;
 }
 
+// The PC tools only exist for Claude while the local agent is paired,
+// reachable and not paused - so on a phone (or with the agent off) it never
+// even tries them.
+export function getToolSchemas() {
+  return [...TOOL_SCHEMAS, EXPERT_TOOL_SCHEMA, ...(pcAvailable() ? PC_TOOL_SCHEMAS : [])];
+}
+
 const CALENDAR_TOOLS = new Set(["list_events", "find_conflicts", "create_event", "update_event", "delete_event"]);
 
 // ctx = { uid }
 export async function executeTool(name, input, ctx) {
+  if (name.startsWith("pc_")) return executePcTool(name, input, ctx);
+  if (name === "solve_with_expert") return executeExpertTool(input, ctx);
   if (CALENDAR_TOOLS.has(name) && !cal.isConnected()) {
     return {
       error: "calendar_not_connected",

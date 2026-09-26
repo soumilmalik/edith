@@ -8,6 +8,7 @@ import CalendarView from "./components/CalendarView.jsx";
 import TimerReminderPanel from "./components/TimerReminderPanel.jsx";
 import HealthPanel from "./components/HealthPanel.jsx";
 import TaskList from "./components/TaskList.jsx";
+import PcAgentPanel from "./components/PcAgentPanel.jsx";
 import DomainSettings from "./components/DomainSettings.jsx";
 import Onboarding from "./components/Onboarding.jsx";
 import UploadSchedule from "./components/UploadSchedule.jsx";
@@ -35,6 +36,7 @@ function DesktopDashboard() {
         <Clock />
 
         <div className="right-col">
+          <PcAgentPanel />
           <HealthPanel />
           <TimerReminderPanel />
           <Onboarding />
