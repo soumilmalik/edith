@@ -56,8 +56,11 @@ export async function startScribeStream({
   const token = tokenData.token || tokenData.value || tokenData.single_use_token;
   if (!token) throw new Error("No single-use token returned");
 
+  // language_code=en: without it the recognizer auto-detects and wrote English
+  // names ("Ashmita Malik") in Devanagari. Forced to English it always writes
+  // Latin letters, including for Hindi words.
   const ws = new WebSocket(
-    `wss://api.elevenlabs.io/v1/speech-to-text/realtime?token=${encodeURIComponent(token)}&model_id=scribe_v2_realtime`
+    `wss://api.elevenlabs.io/v1/speech-to-text/realtime?token=${encodeURIComponent(token)}&model_id=scribe_v2_realtime&language_code=en`
   );
 
   let audioCtx = null;

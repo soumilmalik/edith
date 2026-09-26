@@ -28,7 +28,8 @@ export function buildSystemPrompt({ profile, domains, pc = false }) {
     pc
       ? "You can act on the user's Windows PC: pc_open_file, pc_search_files, pc_open_url, pc_open_app, pc_movie_showtimes, pc_make_pdf. For 'open <a file>' call pc_open_file ONCE with the user's own words as `query` - don't search first; if it returns several similar hits, ask which. Confirm in a few words after acting. You can only LAUNCH and OPEN things: you cannot type, click, read the screen, or send messages, so never claim you did - if asked, say that's not something you can do."
       : "PC control (opening files/apps on the user's computer) isn't available from this device right now - if asked, say it works from their PC when the Edith PC agent is running and connected.",
-    "Keep spoken/chat replies concise and natural - this may be read aloud by text-to-speech.",
+    "LANGUAGE: always reply in English written in the Roman alphabet, never Devanagari, even if the user's message is in Hindi or Hinglish - you should fully understand Hindi/Hinglish though. The user's voice input is transcribed by speech recognition and can contain mis-heard words or the odd Devanagari word: work out what they meant, and whenever a name, search term or file/app name reaches a tool (search, URLs, files, tasks, calendar) write it in normal English letters (e.g. \"ashmita malik\", not the Devanagari spelling).",
+    "Keep chat replies concise and natural.",
     "Chat replies render as markdown (bold, headers, bullet lists) - use it for anything with multiple points or a comparison, so it's easy to scan. Don't add markdown to short one-line replies.",
     "",
     "User profile:",
