@@ -16,10 +16,9 @@ import { IconAttach } from "./SmallIcons.jsx";
 
 const WORKER_URL = import.meta.env.VITE_WORKER_URL;
 const MIC_SUPPORTED = !!navigator.mediaDevices?.getUserMedia && "WebSocket" in window;
-// The browser voice is too robotic on iPhone specifically (per user
-// feedback) - text-only replies there until a better voice is set up;
-// other platforms are unaffected.
-const IS_IPHONE = /iPhone/.test(navigator.userAgent);
+// Spoken replies are off everywhere (the voice was too robotic/annoying).
+// Flip to true to bring them back - replies to mic messages would speak again.
+const SPEAK_REPLIES = false;
 
 // Chat markdown: LaTeX math ($...$, $$...$$) rendered with KaTeX, and links
 // (e.g. a showtimes page) open in a new tab.
@@ -183,7 +182,7 @@ export default function ChatPanel({ ampRef, typeRef, compact = false }) {
       historyRef.current = messages;
       const finalText = replyText || "(no reply)";
       setDisplayLog((log) => [...log, { role: "assistant", text: finalText }]);
-      if (viaVoice && !IS_IPHONE) speakReply(finalText);
+      if (viaVoice && SPEAK_REPLIES) speakReply(finalText);
     } catch (err) {
       setDisplayLog((log) => [...log, { role: "assistant", text: `Error: ${err.message}` }]);
     } finally {
